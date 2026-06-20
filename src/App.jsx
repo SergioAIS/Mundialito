@@ -271,12 +271,35 @@ function App() {
             if (error) console.error("❌ Error en Supabase para el partido", pred.partidoId, ":", error);
             else console.log("✅ Guardado en Supabase:", data);
           }));
-          console.log("4. --- FIN DEL GUARDADO ---");
+          console.log("4. --- FIN DEL GUARDADO DE PARTIDOS ---");
         } catch (err) {
           console.error("❌ Error catastrófico en el bucle:", err);
         }
       } else {
         console.log("2. No hay predicciones válidas para enviar a Supabase.");
+      }
+
+      // Guardado del Top 4 en Supabase
+      if (predictions.first || predictions.second || predictions.third || predictions.fourth) {
+        const payloadTop4 = {
+          usuario: username,
+          campeon: predictions.first || '',
+          subcampeon: predictions.second || '',
+          tercero: predictions.third || '',
+          cuarto: predictions.fourth || ''
+        };
+        console.log("5. Intentando upsert Top 4 con:", payloadTop4);
+        try {
+          const { data: top4Data, error: top4Error } = await supabase
+            .from('top4_comunidad')
+            .upsert(payloadTop4, { onConflict: 'usuario' })
+            .select();
+            
+          if (top4Error) console.error("❌ Error guardando Top 4 en Supabase:", top4Error);
+          else console.log("✅ Top 4 guardado en Supabase:", top4Data);
+        } catch (err) {
+          console.error("❌ Error catastrófico guardando Top 4:", err);
+        }
       }
     } else {
       console.log("2. No se envía a Supabase: isOnline=", isOnline, " user=", !!user);
@@ -477,8 +500,22 @@ function App() {
                     </div>
                     <span className="font-semibold text-slate-200">{pred.usuario}</span>
                   </div>
-                  <div className="font-mono font-bold text-xl bg-slate-900 px-4 py-2 rounded-lg border border-slate-700 text-emerald-400 shadow-inner">
-                    {pred.prediccion}
+                  <div className="flex items-center gap-2">
+                    {pred.prediccion && pred.prediccion.includes(' - ') ? (
+                      <>
+                        <div className="w-10 h-10 flex items-center justify-center font-mono font-black text-xl bg-slate-900 rounded-lg border border-slate-700 text-emerald-400 shadow-inner">
+                          {pred.prediccion.split(' - ')[0].trim()}
+                        </div>
+                        <span className="text-slate-500 font-bold">-</span>
+                        <div className="w-10 h-10 flex items-center justify-center font-mono font-black text-xl bg-slate-900 rounded-lg border border-slate-700 text-emerald-400 shadow-inner">
+                          {pred.prediccion.split(' - ')[1].trim()}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="font-mono font-bold text-xl bg-slate-900 px-4 py-2 rounded-lg border border-slate-700 text-emerald-400 shadow-inner">
+                        {pred.prediccion}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))
