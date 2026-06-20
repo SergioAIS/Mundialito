@@ -249,21 +249,25 @@ function App() {
             upserts.push({
               usuario: user.username || user.name, 
               partido_id: matchId,
-              score1: Number(pred.score1),
-              score2: Number(pred.score2)
+              prediccion: `${pred.score1} - ${pred.score2}`
             });
           }
         }
         
         if (upserts.length > 0) {
-          const { error } = await supabase
+          const { data, error } = await supabase
             .from('predicciones_comunidad')
-            .upsert(upserts, { onConflict: 'usuario, partido_id' });
+            .upsert(upserts, { onConflict: 'usuario, partido_id' })
+            .select();
             
-          if (error) throw error;
+          if (error) {
+            console.error("❌ Error guardando en Supabase:", error.message, error.details);
+          } else {
+            console.log("✅ Predicción guardada exitosamente en la nube:", data);
+          }
         }
       } catch(e) {
-        console.error("Error guardando en Supabase", e);
+        console.error("❌ Excepción guardando en Supabase:", e);
       }
     }
 
