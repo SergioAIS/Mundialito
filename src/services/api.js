@@ -35,7 +35,7 @@ export const TEAM_DICTIONARY = {
 export const MATCH_TIMES_OVERRIDE = {
   // Grupo D
   "United States-Australia": "2026-06-19T15:00:00-04:00",
-  "Turkey-Paraguay": "2026-06-20T00:00:00-04:00",
+  "Turkey-Paraguay": "2026-06-19T23:00:00-04:00",
   "Paraguay-Australia": "2026-06-25T22:00:00-04:00",
   "Turkey-United States": "2026-06-25T22:00:00-04:00",
   // Grupo A
@@ -46,7 +46,7 @@ export const MATCH_TIMES_OVERRIDE = {
   "Switzerland-Canada": "2026-06-24T15:00:00-04:00",
   // Grupo C
   "Scotland-Morocco": "2026-06-19T18:00:00-04:00",
-  "Brazil-Haiti": "2026-06-19T21:00:00-04:00",
+  "Brazil-Haiti": "2026-06-19T20:30:00-04:00",
   "Scotland-Brazil": "2026-06-24T18:00:00-04:00",
   "Morocco-Haiti": "2026-06-24T18:00:00-04:00",
   // Grupo E

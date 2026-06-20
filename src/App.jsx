@@ -3,6 +3,7 @@ import { Wifi, WifiOff, Trophy, User, CloudUpload, Send, Home, Calendar, Users, 
 import offlineStorage from './utils/offlineStorage';
 import { communityPredictions } from './data/mundialData';
 import { fetchLiveMatches, calculateStandings, getBoliviaTimeData, TEAM_DICTIONARY } from './services/api';
+import { supabase } from './services/supabase';
 
 const flags = {};
 Object.values(TEAM_DICTIONARY).forEach(info => {
@@ -11,10 +12,37 @@ Object.values(TEAM_DICTIONARY).forEach(info => {
 
 const TEAMS = Object.keys(flags).sort();
 
-const getFlag = (team) => {
-  if (team === 'Por definir') return '🏁';
-  return flags[team] || '🏳️';
+const getFlag = (teamName) => {
+  if (!teamName || teamName === 'Por definir') return '🏳️';
+  return flags[teamName] || '🏳️';
 };
+
+// Función para calcular puntos de predicción
+function calculatePoints(realScore1, realScore2, predictedScore1, predictedScore2) {
+  if (realScore1 === null || realScore2 === null || predictedScore1 === undefined || predictedScore2 === undefined || predictedScore1 === '' || predictedScore2 === '') {
+    return null;
+  }
+  
+  const rs1 = Number(realScore1);
+  const rs2 = Number(realScore2);
+  const ps1 = Number(predictedScore1);
+  const ps2 = Number(predictedScore2);
+
+  if (rs1 === ps1 && rs2 === ps2) {
+    return { points: 3, label: '¡Marcador Exacto!', color: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30', icon: '🎯' };
+  }
+
+  const realDiff = rs1 - rs2;
+  const predDiff = ps1 - ps2;
+
+  const sameWinner = (realDiff > 0 && predDiff > 0) || (realDiff < 0 && predDiff < 0) || (realDiff === 0 && predDiff === 0);
+
+  if (sameWinner) {
+    return { points: 1, label: '¡Acertaste Ganador!', color: 'text-blue-400 bg-blue-400/10 border-blue-400/30', icon: '🏆' };
+  }
+
+  return { points: 0, label: '', color: 'text-slate-400 bg-slate-800 border-slate-700/50', icon: '' };
+}
 
 const isTop4Locked = () => {
   return Date.now() >= new Date('2026-06-25T00:00:00-04:00').getTime();
@@ -43,6 +71,9 @@ function App() {
   const [predictions, setPredictions] = useState({ first: '', second: '', third: '', fourth: '' });
   const [matchPredictions, setMatchPredictions] = useState({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  
+  // Estado para la comunidad SQL
+  const [communityVotes, setCommunityVotes] = useState([]);
 
   // Inicializar usuario y predicciones desde localStorage
   useEffect(() => {
@@ -64,7 +95,7 @@ function App() {
     setQueueLength(offlineStorage.getQueue().length);
   }, []);
 
-  // Cargar datos de la API
+  // Cargar datos de la API y auto-sincronizar cada 2 minutos
   useEffect(() => {
     const initApp = async () => {
       try {
@@ -81,7 +112,15 @@ function App() {
       }
     };
 
+    // Carga inicial
     initApp();
+
+    // Sincronización automática de goles y estado de partidos en tiempo real (cada 2 minutos)
+    const intervalId = setInterval(() => {
+      initApp();
+    }, 120000);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   // Escuchar eventos de red
@@ -115,6 +154,55 @@ function App() {
     processSyncQueue();
   }, [isOnline, isSyncing]);
 
+  // Fetch y Suscripción en Tiempo Real de predicciones de la comunidad
+  useEffect(() => {
+    const enCursoGlobal = matches.find(m => m.status === 'EN_CURSO');
+    const finalizadosGlobal = matches.filter(m => m.status === 'FINALIZADO').sort((a,b) => new Date(b.date) - new Date(a.date));
+    const featuredMatchGlobal = enCursoGlobal || finalizadosGlobal[0];
+
+    if (!featuredMatchGlobal?.id) return;
+    const matchId = featuredMatchGlobal.id;
+
+    const fetchVotes = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('predicciones_comunidad')
+          .select('*')
+          .eq('partido_id', matchId);
+          
+        if (error) throw error;
+        setCommunityVotes(data || []);
+      } catch (e) {
+        console.error("Error al obtener votos de la comunidad desde Supabase", e);
+      }
+    };
+    
+    // Carga inicial
+    fetchVotes();
+
+    // Suscripción a cambios en tiempo real para este partido
+    const channel = supabase
+      .channel(`realtime:predicciones_${matchId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'predicciones_comunidad',
+          filter: `partido_id=eq.${matchId}`
+        },
+        (payload) => {
+          // Refrescamos los votos inmediatamente tras detectar un cambio en la base de datos
+          fetchVotes();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [matches]);
+
   const handleLogin = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -147,10 +235,38 @@ function App() {
     setCurrentTab(newTab);
   };
 
-  const handleSavePredictions = () => {
+  const handleSavePredictions = async () => {
     offlineStorage.savePredictions(predictions);
     offlineStorage.saveMatchPredictions(matchPredictions);
     
+    // Guardar en Supabase si hay internet
+    if (isOnline && user && user.username) {
+      try {
+        const upserts = [];
+        for (const matchId in matchPredictions) {
+          const pred = matchPredictions[matchId];
+          if (pred.score1 !== undefined && pred.score2 !== undefined && pred.score1 !== '' && pred.score2 !== '') {
+            upserts.push({
+              usuario: user.username || user.name, 
+              partido_id: matchId,
+              score1: Number(pred.score1),
+              score2: Number(pred.score2)
+            });
+          }
+        }
+        
+        if (upserts.length > 0) {
+          const { error } = await supabase
+            .from('predicciones_comunidad')
+            .upsert(upserts, { onConflict: 'usuario, partido_id' });
+            
+          if (error) throw error;
+        }
+      } catch(e) {
+        console.error("Error guardando en Supabase", e);
+      }
+    }
+
     if (!isOnline) {
       offlineStorage.enqueueSync('UPDATE_PREDICTIONS', { top4: predictions, matches: matchPredictions });
       setQueueLength(offlineStorage.getQueue().length);
@@ -174,31 +290,52 @@ function App() {
     }
   };
 
-  const renderHeader = () => (
-    <header className="flex justify-between items-center p-4 bg-slate-800 border-b border-slate-700 shadow-md sticky top-0 z-20">
-      <div className="flex items-center gap-2">
-        <Trophy className="text-emerald-400 w-6 h-6" />
-        <h1 className="text-xl font-bold tracking-wide">Mundialero</h1>
-      </div>
-      <div className="flex items-center gap-4">
-        {user && (
-          <div className="hidden sm:flex items-center gap-2 text-sm bg-slate-700 px-3 py-1.5 rounded-full text-slate-200 border border-slate-600">
-            <User className="w-4 h-4" />
-            <span className="font-semibold">{user.name}</span>
-            <span className="text-xs font-mono text-emerald-400 ml-1">#{user.id}</span>
-          </div>
-        )}
-        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-          isOnline 
-            ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-800/50' 
-            : 'bg-red-900/40 text-red-400 border border-red-800/50'
-        }`}>
-          {isOnline ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
-          {isOnline ? 'Online' : 'Offline'}
+  const renderHeader = () => {
+    // Calculamos el total de puntos del usuario
+    const totalPoints = matches.filter(m => m.status === 'FINALIZADO').reduce((acc, m) => {
+      const uPred = matchPredictions[m.id];
+      if (uPred && uPred.score1 !== undefined && uPred.score2 !== undefined && uPred.score1 !== '' && uPred.score2 !== '') {
+        const pts = calculatePoints(m.score1, m.score2, uPred.score1, uPred.score2);
+        return acc + (pts ? pts.points : 0);
+      }
+      return acc;
+    }, 0);
+
+    return (
+      <header className="flex justify-between items-center p-4 bg-slate-800 border-b border-slate-700 shadow-md sticky top-0 z-20">
+        <div className="flex items-center gap-2">
+          <Trophy className="text-emerald-400 w-6 h-6" />
+          <h1 className="text-xl font-bold tracking-wide">Mundialero</h1>
         </div>
-      </div>
-    </header>
-  );
+        <div className="flex items-center gap-4">
+          {user && (
+            <div className="flex items-center gap-3">
+              <div className="flex items-center bg-emerald-900/40 border border-emerald-500/30 px-3 py-1.5 rounded-full shadow-inner">
+                <span className="text-sm font-bold text-emerald-400 whitespace-nowrap">Puntos: {totalPoints}</span>
+              </div>
+              <div className="hidden sm:flex items-center gap-2 text-sm bg-slate-700 px-3 py-1.5 rounded-full text-slate-200 border border-slate-600">
+                <User className="w-4 h-4" />
+                <span className="font-semibold">{user.name}</span>
+              </div>
+            </div>
+          )}
+          {!user && (
+            <button className="text-sm font-bold text-emerald-400 hover:text-emerald-300">
+              Ingresar
+            </button>
+          )}
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+            isOnline 
+              ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-800/50' 
+              : 'bg-red-900/40 text-red-400 border border-red-800/50'
+          }`}>
+            {isOnline ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
+            {isOnline ? 'Online' : 'Offline'}
+          </div>
+        </div>
+      </header>
+    );
+  };
 
   const renderLogin = () => (
     <div className="flex-1 flex flex-col items-center justify-center p-6">
@@ -316,19 +453,25 @@ function App() {
             </span>
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {communityPredictions.map((pred, idx) => (
-              <div key={idx} className="bg-slate-900/50 border border-slate-700/50 p-4 rounded-xl flex justify-between items-center hover:bg-slate-700/30 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-emerald-900/40 flex items-center justify-center border border-emerald-500/30 text-emerald-400 font-black text-lg">
-                    {pred.user.charAt(0)}
+            {communityVotes.length > 0 ? (
+              communityVotes.map((pred, idx) => (
+                <div key={idx} className="bg-slate-900/50 border border-slate-700/50 p-4 rounded-xl flex justify-between items-center hover:bg-slate-700/30 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-emerald-900/40 flex items-center justify-center border border-emerald-500/30 text-emerald-400 font-black text-lg">
+                      {pred.usuario.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="font-semibold text-slate-200">{pred.usuario}</span>
                   </div>
-                  <span className="font-semibold text-slate-200">{pred.user}</span>
+                  <div className="font-mono font-bold text-xl bg-slate-900 px-4 py-2 rounded-lg border border-slate-700 text-emerald-400 shadow-inner">
+                    {pred.prediccion}
+                  </div>
                 </div>
-                <div className="font-mono font-bold text-xl bg-slate-900 px-4 py-2 rounded-lg border border-slate-700 text-emerald-400 shadow-inner">
-                  {pred.pred}
-                </div>
+              ))
+            ) : (
+              <div className="col-span-1 sm:col-span-2 text-center py-6 text-slate-400">
+                Aún no hay predicciones para este partido. ¡Sé el primero en predecir!
               </div>
-            ))}
+            )}
           </div>
         </div>
 
@@ -447,7 +590,8 @@ function App() {
               <div className="flex flex-col gap-4 mt-6 animate-in slide-in-from-top-2 duration-200">
                 {finalizados.map(m => {
                   const uPred = matchPredictions[m.id];
-                  const uPredStr = uPred && uPred.score1 !== '' && uPred.score2 !== '' ? `${uPred.score1} - ${uPred.score2}` : 'Sin predicción';
+                  const uPredStr = uPred && uPred.score1 !== undefined && uPred.score2 !== undefined && uPred.score1 !== '' && uPred.score2 !== '' ? `${uPred.score1} - ${uPred.score2}` : 'Sin predicción';
+                  const ptsResult = uPredStr !== 'Sin predicción' ? calculatePoints(m.score1, m.score2, uPred.score1, uPred.score2) : null;
                   const btz = getBoliviaTimeData(m.date);
                   
                   return (
@@ -473,16 +617,21 @@ function App() {
                         </div>
                       </div>
                       
-                      <div className="flex flex-col md:flex-row gap-3 mt-2">
-                        <div className="flex-1 bg-slate-900/60 p-3 rounded-lg border border-slate-700/50">
-                          <span className="text-slate-400 block mb-1 text-xs uppercase font-bold tracking-wider">Tu predicción</span>
-                          <span className={`font-mono font-bold text-lg ${uPredStr !== 'Sin predicción' ? 'text-emerald-400' : 'text-slate-500'}`}>{uPredStr}</span>
-                        </div>
-                        <div className="flex-1 bg-slate-900/60 p-3 rounded-lg border border-slate-700/50">
-                          <span className="text-slate-400 block mb-1 text-xs uppercase font-bold tracking-wider">La comunidad apostó</span>
-                          <span className="font-mono font-bold text-lg text-slate-300">
-                            {communityPredictions[0]?.pred || 'N/A'}
-                          </span>
+                      <div className="flex flex-col gap-3 mt-2">
+                        <div className="flex-1 bg-slate-900/60 p-3 rounded-lg border border-slate-700/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                          <div className="flex flex-col">
+                            <span className="text-slate-400 block mb-1 text-xs uppercase font-bold tracking-wider">Tu predicción</span>
+                            <div className="flex items-center gap-3">
+                              <span className={`font-mono font-bold text-lg ${uPredStr !== 'Sin predicción' ? 'text-emerald-400' : 'text-slate-500'}`}>{uPredStr}</span>
+                            </div>
+                          </div>
+                          
+                          {ptsResult && (
+                            <div className={`px-3 py-1.5 rounded-full border text-sm font-bold flex items-center gap-2 ${ptsResult.color}`}>
+                              <span className="font-mono">{ptsResult.points > 0 ? `+${ptsResult.points}` : '0'} pts</span>
+                              {ptsResult.label && <span className="flex items-center gap-1">{ptsResult.icon} {ptsResult.label}</span>}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
