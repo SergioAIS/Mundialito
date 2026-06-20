@@ -74,23 +74,83 @@ function App() {
   
   // Estado para la comunidad SQL
   const [communityVotes, setCommunityVotes] = useState([]);
+  const [communityTop4, setCommunityTop4] = useState([]);
+
+  const hydrateUserData = async (username) => {
+    try {
+      console.log(`Buscando datos históricos para el usuario: ${username}`);
+      
+      // 1. Recuperar Partidos
+      const { data: partidosData, error: partidosError } = await supabase
+        .from('predicciones_comunidad')
+        .select('*')
+        .eq('usuario', username);
+        
+      let hydratedMatchPredictions = { ...offlineStorage.getMatchPredictions() };
+      
+      if (!partidosError && partidosData) {
+        partidosData.forEach(fila => {
+          if (fila.prediccion && fila.prediccion.includes(' - ')) {
+            const [s1, s2] = fila.prediccion.split(' - ').map(s => s.trim());
+            hydratedMatchPredictions[fila.partido_id] = { score1: s1, score2: s2 };
+          }
+        });
+      }
+
+      // 2. Recuperar Top 4
+      const { data: top4Data, error: top4Error } = await supabase
+        .from('top4_comunidad')
+        .select('*')
+        .eq('usuario', username)
+        .maybeSingle();
+        
+      let hydratedTop4 = { ...offlineStorage.getPredictions() };
+      
+      if (!top4Error && top4Data) {
+        hydratedTop4 = {
+          first: top4Data.campeon || '',
+          second: top4Data.subcampeon || '',
+          third: top4Data.tercero || '',
+          fourth: top4Data.cuarto || ''
+        };
+      }
+      
+      // 3. Actualizar Estado y LocalStorage
+      setMatchPredictions(hydratedMatchPredictions);
+      setPredictions(hydratedTop4);
+      offlineStorage.saveMatchPredictions(hydratedMatchPredictions);
+      offlineStorage.savePredictions(hydratedTop4);
+      
+      console.log("✅ Datos del usuario descargados y sincronizados:", {
+        top4: hydratedTop4,
+        partidos: hydratedMatchPredictions,
+        EstructuraParaEstado: hydratedMatchPredictions
+      });
+      
+    } catch (err) {
+      console.error("❌ Error hidratando datos del usuario:", err);
+    }
+  };
 
   // Inicializar usuario y predicciones desde localStorage
   useEffect(() => {
     const existingUser = localStorage.getItem('mundial_user');
     if (existingUser) {
       try {
-        setUser(JSON.parse(existingUser));
+        const parsedUser = JSON.parse(existingUser);
+        setUser(parsedUser);
+        // Hidratar on mount si hay usuario guardado
+        hydrateUserData(parsedUser.username || parsedUser.name);
       } catch (e) {
         console.error("Error leyendo usuario", e);
       }
-    }
-    
-    const savedPredictions = offlineStorage.getPredictions();
-    if (savedPredictions) setPredictions(savedPredictions);
+    } else {
+      const savedPredictions = offlineStorage.getPredictions();
+      if (savedPredictions) setPredictions(savedPredictions);
 
-    const savedMatchPredictions = offlineStorage.getMatchPredictions();
-    if (savedMatchPredictions) setMatchPredictions(savedMatchPredictions);
+      const savedMatchPredictions = offlineStorage.getMatchPredictions();
+      if (savedMatchPredictions) setMatchPredictions(savedMatchPredictions);
+    }
     
     setQueueLength(offlineStorage.getQueue().length);
   }, []);
@@ -105,6 +165,12 @@ function App() {
         // Calcular las tablas dinámicamente a partir de los resultados reales
         const calculatedGroups = calculateStandings(matchesRes);
         setGroupsData(calculatedGroups);
+        
+        // Fetch de la tabla top 4 de la comunidad
+        const top4Res = await supabase.from('top4_comunidad').select('*');
+        if (!top4Res.error && top4Res.data) {
+          setCommunityTop4(top4Res.data);
+        }
       } catch (error) {
         console.error("Error al cargar la aplicación", error);
       } finally {
@@ -203,13 +269,15 @@ function App() {
     };
   }, [matches]);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
     const username = formData.get('username');
     try {
       const loggedUser = offlineStorage.loginUser(username);
       setUser(loggedUser);
+      // Ejecutar hidratación al loguear
+      await hydrateUserData(loggedUser.username || loggedUser.name);
     } catch (err) {
       alert(err.message);
     }
@@ -244,6 +312,7 @@ function App() {
     if (isOnline && user && (user.username || user.name)) {
       const username = user.username || user.name;
       
+      // BLOQUE A: Guardar Partidos
       const prediccionesAGuardar = [];
       for (const matchId in matchPredictions) {
         const pred = matchPredictions[matchId];
@@ -257,7 +326,6 @@ function App() {
 
       if (prediccionesAGuardar.length > 0) {
         console.log("2. Preparando envío a Supabase para las predicciones:", prediccionesAGuardar);
-
         try {
           await Promise.all(prediccionesAGuardar.map(async (pred) => {
             const payload = { usuario: username, partido_id: pred.partidoId, prediccion: pred.marcador };
@@ -273,14 +341,15 @@ function App() {
           }));
           console.log("4. --- FIN DEL GUARDADO DE PARTIDOS ---");
         } catch (err) {
-          console.error("❌ Error catastrófico en el bucle:", err);
+          console.error("❌ Error catastrófico en el bucle de partidos:", err);
         }
       } else {
-        console.log("2. No hay predicciones válidas para enviar a Supabase.");
+        console.log("2. No hay predicciones de partidos válidas para enviar a Supabase.");
       }
 
-      // Guardado del Top 4 en Supabase
-      if (predictions.first || predictions.second || predictions.third || predictions.fourth) {
+      // BLOQUE B: Guardar Top 4 (SIEMPRE)
+      console.log("5. --- INICIANDO GUARDADO DE TOP 4 ---");
+      try {
         const payloadTop4 = {
           usuario: username,
           campeon: predictions.first || '',
@@ -288,19 +357,22 @@ function App() {
           tercero: predictions.third || '',
           cuarto: predictions.fourth || ''
         };
-        console.log("5. Intentando upsert Top 4 con:", payloadTop4);
-        try {
-          const { data: top4Data, error: top4Error } = await supabase
-            .from('top4_comunidad')
-            .upsert(payloadTop4, { onConflict: 'usuario' })
-            .select();
-            
-          if (top4Error) console.error("❌ Error guardando Top 4 en Supabase:", top4Error);
-          else console.log("✅ Top 4 guardado en Supabase:", top4Data);
-        } catch (err) {
-          console.error("❌ Error catastrófico guardando Top 4:", err);
+        console.log("6. Payload del Top 4 a enviar:", payloadTop4);
+
+        const { data: top4Data, error: top4Error } = await supabase
+          .from('top4_comunidad')
+          .upsert(payloadTop4, { onConflict: 'usuario' })
+          .select();
+          
+        if (top4Error) {
+          console.error("❌ Error en Supabase guardando Top 4:", top4Error.message, top4Error.details);
+        } else {
+          console.log("✅ Top 4 guardado exitosamente en la nube:", top4Data);
         }
+      } catch (err) {
+        console.error("❌ Error catastrófico ejecutando Top 4:", err);
       }
+      
     } else {
       console.log("2. No se envía a Supabase: isOnline=", isOnline, " user=", !!user);
     }
@@ -527,39 +599,45 @@ function App() {
           </div>
         </div>
 
-        {/* Top 4 del Usuario */}
+        {/* Top 4 de la Comunidad */}
         <div className="bg-slate-800 rounded-3xl border border-slate-700 p-6 shadow-lg mt-2">
           <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b border-slate-700 pb-3 text-slate-100">
             <Medal className="w-5 h-5 text-emerald-400" />
-            Top 4 de {user.name}
+            Top 4 de la Comunidad
           </h3>
-          {userTop4.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {[
-                { k: 'first', l: '1º', c: 'border-yellow-400/30 bg-yellow-400/5' },
-                { k: 'second', l: '2º', c: 'border-slate-400/30 bg-slate-400/5' },
-                { k: 'third', l: '3º', c: 'border-amber-600/30 bg-amber-600/5' },
-                { k: 'fourth', l: '4º', c: 'border-slate-500/30 bg-slate-500/5' }
-              ].map(({k, l, c}) => {
-                const team = predictions[k];
-                return team ? (
-                  <div key={k} className={`p-3 rounded-xl border flex items-center gap-4 ${c}`}>
-                    <span className="text-sm font-black text-slate-500 w-5">{l}</span>
-                    <span className="text-3xl">{getFlag(team)}</span>
-                    <span className="font-bold text-slate-200">{team}</span>
+          {communityTop4.length > 0 ? (
+            <div className="flex flex-col gap-4">
+              {communityTop4.map((top4Row, idx) => (
+                <div key={idx} className="bg-slate-900/50 border border-slate-700 p-4 rounded-2xl flex flex-col gap-3">
+                  <div className="flex items-center gap-2 border-b border-slate-700 pb-2">
+                    <div className="w-8 h-8 rounded-full bg-emerald-900/40 flex items-center justify-center border border-emerald-500/30 text-emerald-400 font-bold text-sm">
+                      {top4Row.usuario.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="font-bold text-slate-200">{top4Row.usuario}</span>
                   </div>
-                ) : null;
-              })}
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {[
+                      { l: '1º', team: top4Row.campeon, c: 'text-yellow-400' },
+                      { l: '2º', team: top4Row.subcampeon, c: 'text-slate-300' },
+                      { l: '3º', team: top4Row.tercero, c: 'text-amber-600' },
+                      { l: '4º', team: top4Row.cuarto, c: 'text-slate-500' }
+                    ].map(({l, team, c}) => (
+                      team ? (
+                        <div key={l} className="flex items-center gap-2 bg-slate-800/80 p-2 rounded-lg border border-slate-700/50">
+                          <span className={`text-xs font-black ${c}`}>{l}</span>
+                          <span className="text-xl">{getFlag(team)}</span>
+                          <span className="text-xs font-bold text-slate-200 truncate" title={team}>{team}</span>
+                        </div>
+                      ) : null
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="text-center p-8 bg-slate-900/50 rounded-2xl border border-slate-700 border-dashed">
-              <p className="text-slate-400 mb-4">Aún no has hecho tus predicciones para los 4 mejores equipos.</p>
-              <button 
-                onClick={() => handleTabChange('predicciones')}
-                className="text-emerald-400 font-bold hover:text-emerald-300 underline bg-emerald-900/30 px-6 py-2 rounded-xl transition-colors"
-              >
-                ¡Haz tus predicciones ahora!
-              </button>
+              <p className="text-slate-400">Aún no hay predicciones del Top 4 en la comunidad.</p>
             </div>
           )}
         </div>
