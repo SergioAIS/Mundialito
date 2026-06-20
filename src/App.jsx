@@ -236,39 +236,50 @@ function App() {
   };
 
   const handleSavePredictions = async () => {
+    console.log("1. --- BOTÓN GUARDAR PRESIONADO ---");
     offlineStorage.savePredictions(predictions);
     offlineStorage.saveMatchPredictions(matchPredictions);
     
     // Guardar en Supabase si hay internet
-    if (isOnline && user && user.username) {
-      try {
-        const upserts = [];
-        for (const matchId in matchPredictions) {
-          const pred = matchPredictions[matchId];
-          if (pred.score1 !== undefined && pred.score2 !== undefined && pred.score1 !== '' && pred.score2 !== '') {
-            upserts.push({
-              usuario: user.username || user.name, 
-              partido_id: matchId,
-              prediccion: `${pred.score1} - ${pred.score2}`
-            });
-          }
+    if (isOnline && user && (user.username || user.name)) {
+      const username = user.username || user.name;
+      
+      const prediccionesAGuardar = [];
+      for (const matchId in matchPredictions) {
+        const pred = matchPredictions[matchId];
+        if (pred.score1 !== undefined && pred.score2 !== undefined && pred.score1 !== '' && pred.score2 !== '') {
+          prediccionesAGuardar.push({
+            partidoId: matchId,
+            marcador: `${pred.score1} - ${pred.score2}`
+          });
         }
-        
-        if (upserts.length > 0) {
-          const { data, error } = await supabase
-            .from('predicciones_comunidad')
-            .upsert(upserts, { onConflict: 'usuario, partido_id' })
-            .select();
-            
-          if (error) {
-            console.error("❌ Error guardando en Supabase:", error.message, error.details);
-          } else {
-            console.log("✅ Predicción guardada exitosamente en la nube:", data);
-          }
-        }
-      } catch(e) {
-        console.error("❌ Excepción guardando en Supabase:", e);
       }
+
+      if (prediccionesAGuardar.length > 0) {
+        console.log("2. Preparando envío a Supabase para las predicciones:", prediccionesAGuardar);
+
+        try {
+          await Promise.all(prediccionesAGuardar.map(async (pred) => {
+            const payload = { usuario: username, partido_id: pred.partidoId, prediccion: pred.marcador };
+            console.log("3. Intentando upsert con:", payload);
+
+            const { data, error } = await supabase
+              .from('predicciones_comunidad')
+              .upsert(payload, { onConflict: 'usuario, partido_id' })
+              .select();
+
+            if (error) console.error("❌ Error en Supabase para el partido", pred.partidoId, ":", error);
+            else console.log("✅ Guardado en Supabase:", data);
+          }));
+          console.log("4. --- FIN DEL GUARDADO ---");
+        } catch (err) {
+          console.error("❌ Error catastrófico en el bucle:", err);
+        }
+      } else {
+        console.log("2. No hay predicciones válidas para enviar a Supabase.");
+      }
+    } else {
+      console.log("2. No se envía a Supabase: isOnline=", isOnline, " user=", !!user);
     }
 
     if (!isOnline) {
