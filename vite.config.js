@@ -30,8 +30,8 @@ export default defineConfig({
         ]
       },
       manifest: {
-        name: 'Dashboard Mundialero',
-        short_name: 'Mundialero',
+        name: 'Mundialito',
+        short_name: 'Mundialito',
         description: 'La mejor app para seguir todas las estadísticas y resultados del Mundial en tiempo real.',
         theme_color: '#0f172a',
         background_color: '#0f172a',

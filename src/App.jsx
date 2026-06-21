@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wifi, WifiOff, Trophy, User, CloudUpload, Send, Home, Calendar, Users, ListOrdered, Edit3, Save, Medal, Lock, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { Wifi, WifiOff, Trophy, User, CloudUpload, Send, Home, Calendar, Users, ListOrdered, Edit3, Save, Medal, Lock, ChevronDown, ChevronUp, Loader2, LogOut, Smartphone, Monitor, Share, PlusSquare } from 'lucide-react';
 import offlineStorage from './utils/offlineStorage';
 import { communityPredictions } from './data/mundialData';
 import { fetchLiveMatches, calculateStandings, getBoliviaTimeData, TEAM_DICTIONARY } from './services/api';
@@ -57,6 +57,9 @@ const isMatchLocked = (match) => {
 function App() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [user, setUser] = useState(null);
+  const [showLogin, setShowLogin] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [showHelpModal, setShowHelpModal] = useState(false);
   const [queueLength, setQueueLength] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const [currentTab, setCurrentTab] = useState('inicio');
@@ -75,6 +78,53 @@ function App() {
   // Estado para la comunidad SQL
   const [communityVotes, setCommunityVotes] = useState([]);
   const [communityTop4, setCommunityTop4] = useState([]);
+
+  // Estado para flechas de navegación
+  const [showArrows, setShowArrows] = useState(false);
+  const [canScrollUp, setCanScrollUp] = useState(false);
+  const [canScrollDown, setCanScrollDown] = useState(true);
+
+  // Escuchar scroll para flechas flotantes
+  useEffect(() => {
+    let scrollTimeout;
+    
+    const handleScroll = () => {
+      const scrollY = window.scrollY;
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      
+      setCanScrollUp(scrollY > 0);
+      setCanScrollDown(scrollY < maxScroll - 10);
+      
+      setShowArrows(true);
+      
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
+        setShowArrows(false);
+      }, 2000);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    // Verificar estado inicial
+    handleScroll();
+    
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      clearTimeout(scrollTimeout);
+    };
+  }, []);
+
+  // PWA Install Prompt
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+  const scrollToBottom = () => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
 
   const hydrateUserData = async (username) => {
     try {
@@ -269,6 +319,11 @@ function App() {
     };
   }, [matches]);
 
+  const handleLogout = () => {
+    setUser(null);
+    localStorage.removeItem('mundial_user');
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -427,10 +482,20 @@ function App() {
                 <User className="w-4 h-4" />
                 <span className="font-semibold">{user.name}</span>
               </div>
+              <button 
+                onClick={handleLogout} 
+                className="p-1.5 bg-slate-700 rounded-full text-slate-300 hover:text-red-400 hover:bg-slate-600 border border-slate-600 transition-colors" 
+                title="Cerrar sesión"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
             </div>
           )}
           {!user && (
-            <button className="text-sm font-bold text-emerald-400 hover:text-emerald-300">
+            <button 
+              onClick={() => setShowLogin(true)}
+              className="text-sm font-bold text-emerald-400 hover:text-emerald-300"
+            >
               Ingresar
             </button>
           )}
@@ -446,6 +511,92 @@ function App() {
       </header>
     );
   };
+
+  const handleDownloadClick = async () => {
+    if (deferredPrompt) {
+      // Plan A: El navegador soporta instalación nativa directa
+      deferredPrompt.prompt();
+    } else {
+      // Plan B: El navegador bloqueó el prompt (Brave Linux, iPhone Safari, etc.)
+      // Desplegamos nuestro Modal de instrucciones a prueba de fallos
+      setShowHelpModal(true);
+    }
+  };
+
+  const renderLandingPage = () => (
+    <div className="flex-1 flex flex-col items-center justify-center p-6 md:p-12 animate-in fade-in duration-500 mt-4 md:mt-12">
+      <div className="max-w-3xl w-full bg-slate-800/80 backdrop-blur-md p-8 md:p-12 rounded-3xl border border-slate-700 shadow-2xl flex flex-col items-center text-center">
+        
+        <Trophy className="w-20 h-20 text-emerald-400 mb-6 drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]" />
+        <h2 className="text-4xl md:text-5xl font-black text-white mb-4 tracking-tight">
+          Mundialito <span className="text-emerald-400">2026</span>
+        </h2>
+        <p className="text-xl text-slate-300 mb-8 font-medium">
+          Intenta adivinar los resultados del mundial. Compara tus predicciones con otras personas
+        </p>
+
+        <button 
+          onClick={handleDownloadClick}
+          className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-black text-2xl md:text-3xl py-6 px-8 rounded-2xl shadow-xl shadow-emerald-500/20 transition-transform hover:-translate-y-1 mb-6"
+        >
+          ⬇️ Descargar / Instalar Mundialito
+        </button>
+
+        <button 
+          onClick={() => setShowLogin(true)}
+          className="w-full md:w-auto bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-lg py-3 px-12 rounded-xl transition-colors border border-slate-600"
+        >
+          Ya la tengo, iniciar sesión
+        </button>
+      </div>
+
+      {showHelpModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 animate-in fade-in">
+          <div className="bg-slate-800 p-6 md:p-8 rounded-3xl max-w-md w-full border border-slate-600 shadow-2xl relative">
+            <button 
+              onClick={() => setShowHelpModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-700 hover:bg-slate-600 rounded-full p-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            <h3 className="text-2xl font-black text-emerald-400 mb-2 pr-8">Instalación Manual Rápida</h3>
+            <p className="text-slate-300 mb-6 text-sm">Tu navegador requiere un paso extra para instalar la App:</p>
+            
+            <div className="space-y-4 mb-8">
+              <div className="flex gap-3 items-start bg-slate-900/50 p-4 rounded-xl border border-slate-700/50">
+                <span className="text-2xl mt-1">🍎</span>
+                <div>
+                  <p className="font-bold text-slate-200 text-sm mb-1">En iPhone / iPad</p>
+                  <p className="text-xs text-slate-400 leading-relaxed">Toca el botón de Compartir (el cuadrado con la flecha hacia arriba) y selecciona <strong className="text-slate-300">"Agregar a la pantalla de inicio"</strong>.</p>
+                </div>
+              </div>
+              <div className="flex gap-3 items-start bg-slate-900/50 p-4 rounded-xl border border-slate-700/50">
+                <span className="text-2xl mt-1">🤖</span>
+                <div>
+                  <p className="font-bold text-slate-200 text-sm mb-1">En Android (Chrome)</p>
+                  <p className="text-xs text-slate-400 leading-relaxed">Toca los 3 puntos de la esquina superior derecha y selecciona <strong className="text-slate-300">"Instalar aplicación"</strong>.</p>
+                </div>
+              </div>
+              <div className="flex gap-3 items-start bg-slate-900/50 p-4 rounded-xl border border-slate-700/50">
+                <span className="text-2xl mt-1">💻</span>
+                <div>
+                  <p className="font-bold text-slate-200 text-sm mb-1">En PC / Mac (Brave/Edge/Chrome)</p>
+                  <p className="text-xs text-slate-400 leading-relaxed">Mira a la derecha de tu barra de direcciones (donde escribes las URLs) y haz clic en el icono de <strong className="text-slate-300">"Instalar"</strong> o el símbolo de <strong className="text-slate-300">+</strong>.</p>
+                </div>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => setShowHelpModal(false)}
+              className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3.5 px-4 rounded-xl transition-colors border border-slate-600"
+            >
+              Entendido, cerrar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   const renderLogin = () => (
     <div className="flex-1 flex flex-col items-center justify-center p-6">
@@ -1084,8 +1235,34 @@ function App() {
       {renderHeader()}
       
       <main className="flex-1 pb-28">
-        {user ? renderTabContentWrapper() : renderLogin()}
+        {!user ? (
+          showLogin ? renderLogin() : renderLandingPage()
+        ) : (
+          renderTabContentWrapper()
+        )}
       </main>
+
+      {/* Flechas Flotantes de Navegación Vertical */}
+      <div className={`fixed bottom-24 right-6 flex flex-col gap-3 z-50 transition-opacity duration-300 ${showArrows ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+        {canScrollUp && (
+          <button 
+            onClick={scrollToTop} 
+            className="p-3 bg-emerald-600/90 hover:bg-emerald-500 text-white rounded-full shadow-lg border border-emerald-400 backdrop-blur-sm transition-transform hover:scale-110 flex items-center justify-center"
+            title="Ir arriba"
+          >
+            <ChevronUp className="w-6 h-6" />
+          </button>
+        )}
+        {canScrollDown && (
+          <button 
+            onClick={scrollToBottom} 
+            className="p-3 bg-emerald-600/90 hover:bg-emerald-500 text-white rounded-full shadow-lg border border-emerald-400 backdrop-blur-sm transition-transform hover:scale-110 flex items-center justify-center"
+            title="Ir abajo"
+          >
+            <ChevronDown className="w-6 h-6" />
+          </button>
+        )}
+      </div>
 
       {user && renderFooterAlert()}
       {user && renderNavbar()}

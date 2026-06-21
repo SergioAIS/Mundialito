@@ -29,7 +29,10 @@ export const TEAM_DICTIONARY = {
   "Egypt": { es: "Egipto", flag: "🇪🇬" }, "Cape Verde": { es: "Cabo Verde", flag: "🇨🇻" },
   "Iraq": { es: "Irak", flag: "🇮🇶" }, "Norway": { es: "Noruega", flag: "🇳🇴" },
   "Jordan": { es: "Jordania", flag: "🇯🇴" }, "DR Congo": { es: "Rep. Dem. Congo", flag: "🇨🇩" },
-  "Democratic Republic of the Congo": { es: "Rep. Dem. Congo", flag: "🇨🇩" }, "Panama": { es: "Panamá", flag: "🇵🇦" }
+  "Democratic Republic of the Congo": { es: "Rep. Dem. Congo", flag: "🇨🇩" }, "Panama": { es: "Panamá", flag: "🇵🇦" },
+  "Bolivia": { es: "Bolivia", flag: "🇧🇴" }, "Peru": { es: "Perú", flag: "🇵🇪" },
+  "Chile": { es: "Chile", flag: "🇨🇱" }, "Venezuela": { es: "Venezuela", flag: "🇻🇪" },
+  "Poland": { es: "Polonia", flag: "🇵🇱" }, "Serbia": { es: "Serbia", flag: "🇷🇸" }
 };
 
 export const MATCH_TIMES_OVERRIDE = {
@@ -122,9 +125,10 @@ export const getBoliviaTimeData = (isoString) => {
  * Obtiene los partidos desde la API Comunitaria (worldcup26.ir).
  */
 export const fetchLiveMatches = async () => {
+  let gamesArray = [];
   try {
     const url = 'https://worldcup26.ir/get/games';
-    const response = await fetch(url); // Sin headers restrictivos
+    const response = await fetch(url);
     
     console.log("Status HTTP:", response.status);
 
@@ -135,80 +139,106 @@ export const fetchLiveMatches = async () => {
     const data = await response.json();
     console.log("Datos Open-Source:", data);
 
-    // Mapeo Adaptativo
-    const gamesArray = (data && Array.isArray(data.games)) ? data.games : [];
+    gamesArray = (data && Array.isArray(data.games)) ? data.games : [];
     
     if (!gamesArray || gamesArray.length === 0) {
       throw new Error("Datos vacíos o estructura de respuesta no reconocida");
     }
 
-    return gamesArray.map((game, index) => {
-      let label1 = game.home_team_label;
-      if (label1) {
-        label1 = label1.replace('Winner Match', 'Ganador Partido').replace('Loser Match', 'Perdedor Partido');
-      }
-      let label2 = game.away_team_label;
-      if (label2) {
-        label2 = label2.replace('Winner Match', 'Ganador Partido').replace('Loser Match', 'Perdedor Partido');
-      }
-
-      let team1En = String(game.home_team_id) === '0' ? (label1 || 'Por definir') : game.home_team_name_en;
-      let team2En = String(game.away_team_id) === '0' ? (label2 || 'Por definir') : game.away_team_name_en;
-      
-      const team1 = TEAM_DICTIONARY[team1En] ? TEAM_DICTIONARY[team1En].es : team1En;
-      const team2 = TEAM_DICTIONARY[team2En] ? TEAM_DICTIONARY[team2En].es : team2En;
-      
-      const score1 = (game.home_score === 'null' || game.home_score === null || game.home_score === undefined) ? null : Number(game.home_score);
-      const score2 = (game.away_score === 'null' || game.away_score === null || game.away_score === undefined) ? null : Number(game.away_score);
-      
-      let status = 'PENDIENTE';
-      if (String(game.finished).toUpperCase() === 'TRUE') {
-        status = 'FINALIZADO';
-      } else if (String(game.finished).toUpperCase() === 'FALSE') {
-        if (game.time_elapsed === 'notstarted') {
-          status = 'PENDIENTE';
-        } else {
-          status = 'EN_CURSO';
-        }
-      }
-      
-      const matchKey1 = game.home_team_name_en + "-" + game.away_team_name_en;
-      const matchKey2 = game.away_team_name_en + "-" + game.home_team_name_en;
-      
-      let dateIso;
-      if (MATCH_TIMES_OVERRIDE[matchKey1]) {
-        dateIso = MATCH_TIMES_OVERRIDE[matchKey1];
-      } else if (MATCH_TIMES_OVERRIDE[matchKey2]) {
-        dateIso = MATCH_TIMES_OVERRIDE[matchKey2];
-      } else {
-        dateIso = new Date().toISOString();
-        if (game.local_date) {
-          // Asumimos que local_date ya está en la zona horaria correcta para los cálculos de frontend
-          const d = new Date(game.local_date);
-          if (!isNaN(d.getTime())) {
-            dateIso = d.toISOString();
-          }
-        }
-      }
-
-      return {
-        id: game.id || String(index),
-        team1: team1 || 'Equipo 1',
-        team2: team2 || 'Equipo 2',
-        score1,
-        score2,
-        status,
-        date: dateIso,
-        stage: game.type === 'group' ? 'Fase de Grupos' : game.type,
-        group: game.group,
-        matchType: game.type
-      };
-    });
+    // Guardar en caché si la llamada fue exitosa
+    localStorage.setItem('api_matches_cache', JSON.stringify(gamesArray));
 
   } catch (error) {
-    console.error('fetchLiveMatches falló. Retornando datos simulados (fallback):', error);
-    return new Promise(resolve => setTimeout(() => resolve(mockMatches), 800));
+    console.error('fetchLiveMatches falló. Buscando en caché local:', error);
+    const cached = localStorage.getItem('api_matches_cache');
+    if (cached) {
+      try {
+        gamesArray = JSON.parse(cached);
+        console.log("Cargando datos desde caché local.");
+      } catch (e) {
+        console.error("Error parseando caché.", e);
+      }
+    }
+    
+    if (!gamesArray || gamesArray.length === 0) {
+      console.error('Caché falló o está vacía. Retornando datos simulados (fallback).');
+      return new Promise(resolve => setTimeout(() => resolve(mockMatches), 800));
+    }
   }
+
+  return gamesArray.map((game, index) => {
+    let label1 = game.home_team_label;
+    if (label1) {
+      label1 = label1.replace('Winner Match', 'Ganador Partido').replace('Loser Match', 'Perdedor Partido');
+    }
+    let label2 = game.away_team_label;
+    if (label2) {
+      label2 = label2.replace('Winner Match', 'Ganador Partido').replace('Loser Match', 'Perdedor Partido');
+    }
+
+    let team1En = String(game.home_team_id) === '0' ? (label1 || 'Por definir') : game.home_team_name_en;
+    let team2En = String(game.away_team_id) === '0' ? (label2 || 'Por definir') : game.away_team_name_en;
+    
+    let score1 = (game.home_score === 'null' || game.home_score === null || game.home_score === undefined) ? null : Number(game.home_score);
+    let score2 = (game.away_score === 'null' || game.away_score === null || game.away_score === undefined) ? null : Number(game.away_score);
+
+    // Forzar orden alfabético para garantizar integridad entre local y visitante
+    if (team1En > team2En) {
+      const tempTeam = team1En;
+      team1En = team2En;
+      team2En = tempTeam;
+
+      const tempScore = score1;
+      score1 = score2;
+      score2 = tempScore;
+    }
+    
+    const team1 = TEAM_DICTIONARY[team1En] ? TEAM_DICTIONARY[team1En].es : team1En;
+    const team2 = TEAM_DICTIONARY[team2En] ? TEAM_DICTIONARY[team2En].es : team2En;
+    
+    let status = 'PENDIENTE';
+    if (String(game.finished).toUpperCase() === 'TRUE') {
+      status = 'FINALIZADO';
+    } else if (String(game.finished).toUpperCase() === 'FALSE') {
+      if (game.time_elapsed === 'notstarted') {
+        status = 'PENDIENTE';
+      } else {
+        status = 'EN_CURSO';
+      }
+    }
+    
+    const matchKey1 = game.home_team_name_en + "-" + game.away_team_name_en;
+    const matchKey2 = game.away_team_name_en + "-" + game.home_team_name_en;
+    
+    let dateIso;
+    if (MATCH_TIMES_OVERRIDE[matchKey1]) {
+      dateIso = MATCH_TIMES_OVERRIDE[matchKey1];
+    } else if (MATCH_TIMES_OVERRIDE[matchKey2]) {
+      dateIso = MATCH_TIMES_OVERRIDE[matchKey2];
+    } else {
+      dateIso = new Date().toISOString();
+      if (game.local_date) {
+        // Asumimos que local_date ya está en la zona horaria correcta para los cálculos de frontend
+        const d = new Date(game.local_date);
+        if (!isNaN(d.getTime())) {
+          dateIso = d.toISOString();
+        }
+      }
+    }
+
+    return {
+      id: game.id || String(index),
+      team1: team1 || 'Equipo 1',
+      team2: team2 || 'Equipo 2',
+      score1,
+      score2,
+      status,
+      date: dateIso,
+      stage: game.type === 'group' ? 'Fase de Grupos' : game.type,
+      group: game.group,
+      matchType: game.type
+    };
+  });
 };
 
 /**
