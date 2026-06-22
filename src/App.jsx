@@ -22,7 +22,7 @@ function calculatePoints(realScore1, realScore2, predictedScore1, predictedScore
   if (realScore1 === null || realScore2 === null || predictedScore1 === undefined || predictedScore2 === undefined || predictedScore1 === '' || predictedScore2 === '') {
     return null;
   }
-  
+
   const rs1 = Number(realScore1);
   const rs2 = Number(realScore2);
   const ps1 = Number(predictedScore1);
@@ -64,7 +64,7 @@ function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [currentTab, setCurrentTab] = useState('inicio');
   const [showHistory, setShowHistory] = useState(false);
-  
+
   // Estado de Datos Reales de la API
   const [matches, setMatches] = useState([]);
   const [groupsData, setGroupsData] = useState([]);
@@ -74,7 +74,7 @@ function App() {
   const [predictions, setPredictions] = useState({ first: '', second: '', third: '', fourth: '' });
   const [matchPredictions, setMatchPredictions] = useState({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  
+
   // Estado para la comunidad SQL
   const [communityVotes, setCommunityVotes] = useState([]);
   const [communityTop4, setCommunityTop4] = useState([]);
@@ -88,16 +88,16 @@ function App() {
   // Escuchar scroll para flechas flotantes
   useEffect(() => {
     let scrollTimeout;
-    
+
     const handleScroll = () => {
       const scrollY = window.scrollY;
       const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-      
+
       setCanScrollUp(scrollY > 0);
       setCanScrollDown(scrollY < maxScroll - 10);
-      
+
       setShowArrows(true);
-      
+
       clearTimeout(scrollTimeout);
       scrollTimeout = setTimeout(() => {
         setShowArrows(false);
@@ -107,7 +107,7 @@ function App() {
     window.addEventListener('scroll', handleScroll);
     // Verificar estado inicial
     handleScroll();
-    
+
     return () => {
       window.removeEventListener('scroll', handleScroll);
       clearTimeout(scrollTimeout);
@@ -130,15 +130,15 @@ function App() {
   const hydrateUserData = async (username) => {
     try {
       console.log(`Buscando datos históricos para el usuario: ${username}`);
-      
+
       // 1. Recuperar Partidos
       const { data: partidosData, error: partidosError } = await supabase
         .from('predicciones_comunidad')
         .select('*')
         .eq('usuario', username);
-        
+
       let hydratedMatchPredictions = { ...offlineStorage.getMatchPredictions() };
-      
+
       if (!partidosError && partidosData) {
         partidosData.forEach(fila => {
           if (fila.prediccion && fila.prediccion.includes(' - ')) {
@@ -154,9 +154,9 @@ function App() {
         .select('*')
         .eq('usuario', username)
         .maybeSingle();
-        
+
       let hydratedTop4 = { ...offlineStorage.getPredictions() };
-      
+
       if (!top4Error && top4Data) {
         hydratedTop4 = {
           first: top4Data.campeon || '',
@@ -165,19 +165,19 @@ function App() {
           fourth: top4Data.cuarto || ''
         };
       }
-      
+
       // 3. Actualizar Estado y LocalStorage
       setMatchPredictions(hydratedMatchPredictions);
       setPredictions(hydratedTop4);
       offlineStorage.saveMatchPredictions(hydratedMatchPredictions);
       offlineStorage.savePredictions(hydratedTop4);
-      
+
       console.log("✅ Datos del usuario descargados y sincronizados:", {
         top4: hydratedTop4,
         partidos: hydratedMatchPredictions,
         EstructuraParaEstado: hydratedMatchPredictions
       });
-      
+
     } catch (err) {
       console.error("❌ Error hidratando datos del usuario:", err);
     }
@@ -202,7 +202,7 @@ function App() {
       const savedMatchPredictions = offlineStorage.getMatchPredictions();
       if (savedMatchPredictions) setMatchPredictions(savedMatchPredictions);
     }
-    
+
     setQueueLength(offlineStorage.getQueue().length);
   }, []);
 
@@ -252,11 +252,11 @@ function App() {
       try {
         const matchesRes = await fetchLiveMatches();
         setMatches(matchesRes);
-        
+
         // Calcular las tablas dinámicamente a partir de los resultados reales
         const calculatedGroups = calculateStandings(matchesRes);
         setGroupsData(calculatedGroups);
-        
+
         // Fetch de la tabla top 4 de la comunidad
         const top4Res = await supabase.from('top4_comunidad').select('*');
         if (!top4Res.error && top4Res.data) {
@@ -278,7 +278,7 @@ function App() {
     // Sincronización automática de goles y estado de partidos en tiempo real (cada 2 minutos)
     const intervalId = setInterval(() => {
       initApp();
-    }, 120000);
+    }, 60000);
 
     return () => clearInterval(intervalId);
   }, []);
@@ -310,14 +310,14 @@ function App() {
         }, 2000);
       }
     };
-    
+
     processSyncQueue();
   }, [isOnline, isSyncing]);
 
   // Fetch y Suscripción en Tiempo Real de predicciones de la comunidad
   useEffect(() => {
     const enCursoGlobal = matches.find(m => m.status === 'EN_CURSO');
-    const finalizadosGlobal = matches.filter(m => m.status === 'FINALIZADO').sort((a,b) => new Date(b.date) - new Date(a.date));
+    const finalizadosGlobal = matches.filter(m => m.status === 'FINALIZADO').sort((a, b) => new Date(b.date) - new Date(a.date));
     const featuredMatchGlobal = enCursoGlobal || finalizadosGlobal[0];
 
     if (!featuredMatchGlobal?.id) return;
@@ -329,14 +329,14 @@ function App() {
           .from('predicciones_comunidad')
           .select('*')
           .eq('partido_id', matchId);
-          
+
         if (error) throw error;
         setCommunityVotes(data || []);
       } catch (e) {
         console.error("Error al obtener votos de la comunidad desde Supabase", e);
       }
     };
-    
+
     // Carga inicial
     fetchVotes();
 
@@ -384,21 +384,21 @@ function App() {
 
   const handleTabChange = (newTab) => {
     if (newTab === currentTab) return;
-    
+
     if (hasUnsavedChanges) {
       const confirmLeave = window.confirm("Tienes predicciones sin guardar. ¿Seguro que quieres salir de esta pestaña? Se perderán los cambios visuales no guardados.");
       if (!confirmLeave) return;
-      
+
       const savedPredictions = offlineStorage.getPredictions();
       if (savedPredictions) setPredictions(savedPredictions);
-      
+
       const savedMatchPredictions = offlineStorage.getMatchPredictions();
       if (savedMatchPredictions) setMatchPredictions(savedMatchPredictions);
       else setMatchPredictions({});
 
       setHasUnsavedChanges(false);
     }
-    
+
     setCurrentTab(newTab);
   };
 
@@ -406,11 +406,11 @@ function App() {
     console.log("1. --- BOTÓN GUARDAR PRESIONADO ---");
     offlineStorage.savePredictions(predictions);
     offlineStorage.saveMatchPredictions(matchPredictions);
-    
+
     // Guardar en Supabase si hay internet
     if (isOnline && user && (user.username || user.name)) {
       const username = user.username || user.name;
-      
+
       // BLOQUE A: Guardar Partidos
       const prediccionesAGuardar = [];
       for (const matchId in matchPredictions) {
@@ -462,7 +462,7 @@ function App() {
           .from('top4_comunidad')
           .upsert(payloadTop4, { onConflict: 'usuario' })
           .select();
-          
+
         if (top4Error) {
           console.error("❌ Error en Supabase guardando Top 4:", top4Error.message, top4Error.details);
         } else {
@@ -471,7 +471,7 @@ function App() {
       } catch (err) {
         console.error("❌ Error catastrófico ejecutando Top 4:", err);
       }
-      
+
     } else {
       console.log("2. No se envía a Supabase: isOnline=", isOnline, " user=", !!user);
     }
@@ -480,9 +480,9 @@ function App() {
       offlineStorage.enqueueSync('UPDATE_PREDICTIONS', { top4: predictions, matches: matchPredictions });
       setQueueLength(offlineStorage.getQueue().length);
     }
-    
+
     setHasUnsavedChanges(false);
-    
+
     const btn = document.getElementById('btn-save');
     if (btn) {
       const originalText = btn.innerHTML;
@@ -526,9 +526,9 @@ function App() {
                 <User className="w-4 h-4" />
                 <span className="font-semibold">{user.name}</span>
               </div>
-              <button 
-                onClick={handleLogout} 
-                className="p-1.5 bg-slate-700 rounded-full text-slate-300 hover:text-red-400 hover:bg-slate-600 border border-slate-600 transition-colors" 
+              <button
+                onClick={handleLogout}
+                className="p-1.5 bg-slate-700 rounded-full text-slate-300 hover:text-red-400 hover:bg-slate-600 border border-slate-600 transition-colors"
                 title="Cerrar sesión"
               >
                 <LogOut className="w-4 h-4" />
@@ -536,18 +536,17 @@ function App() {
             </div>
           )}
           {!user && (
-            <button 
+            <button
               onClick={() => setShowLogin(true)}
               className="text-sm font-bold text-emerald-400 hover:text-emerald-300"
             >
               Ingresar
             </button>
           )}
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-            isOnline 
-              ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-800/50' 
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${isOnline
+              ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-800/50'
               : 'bg-red-900/40 text-red-400 border border-red-800/50'
-          }`}>
+            }`}>
             {isOnline ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
             {isOnline ? 'Online' : 'Offline'}
           </div>
@@ -570,7 +569,7 @@ function App() {
   const renderLandingPage = () => (
     <div className="flex-1 flex flex-col items-center justify-center p-6 md:p-12 animate-in fade-in duration-500 mt-4 md:mt-12">
       <div className="max-w-3xl w-full bg-slate-800/80 backdrop-blur-md p-8 md:p-12 rounded-3xl border border-slate-700 shadow-2xl flex flex-col items-center text-center">
-        
+
         <Trophy className="w-20 h-20 text-emerald-400 mb-6 drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]" />
         <h2 className="text-4xl md:text-5xl font-black text-white mb-4 tracking-tight">
           Mundialito <span className="text-emerald-400">2026</span>
@@ -579,14 +578,14 @@ function App() {
           Intenta adivinar los resultados del mundial. Compara tus predicciones con otras personas
         </p>
 
-        <button 
+        <button
           onClick={handleDownloadClick}
           className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-black text-2xl md:text-3xl py-6 px-8 rounded-2xl shadow-xl shadow-emerald-500/20 transition-transform hover:-translate-y-1 mb-6"
         >
           ⬇️ Descargar / Instalar Mundialito
         </button>
 
-        <button 
+        <button
           onClick={() => setShowLogin(true)}
           className="w-full md:w-auto bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-lg py-3 px-12 rounded-xl transition-colors border border-slate-600"
         >
@@ -597,7 +596,7 @@ function App() {
       {showHelpModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 animate-in fade-in">
           <div className="bg-slate-800 p-6 md:p-8 rounded-3xl max-w-md w-full border border-slate-600 shadow-2xl relative">
-            <button 
+            <button
               onClick={() => setShowHelpModal(false)}
               className="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-700 hover:bg-slate-600 rounded-full p-2"
             >
@@ -605,7 +604,7 @@ function App() {
             </button>
             <h3 className="text-2xl font-black text-emerald-400 mb-2 pr-8">Instalación Manual Rápida</h3>
             <p className="text-slate-300 mb-6 text-sm">Tu navegador requiere un paso extra para instalar la App:</p>
-            
+
             <div className="space-y-4 mb-8">
               <div className="flex gap-3 items-start bg-slate-900/50 p-4 rounded-xl border border-slate-700/50">
                 <span className="text-2xl mt-1">🍎</span>
@@ -630,7 +629,7 @@ function App() {
               </div>
             </div>
 
-            <button 
+            <button
               onClick={() => setShowHelpModal(false)}
               className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3.5 px-4 rounded-xl transition-colors border border-slate-600"
             >
@@ -652,22 +651,22 @@ function App() {
         </div>
         <h2 className="text-2xl font-bold text-center mb-2">Bienvenido a Mundialero</h2>
         <p className="text-slate-400 text-center mb-8">Ingresa tu nombre para guardar tus predicciones.</p>
-        
+
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label htmlFor="username" className="block text-sm font-medium text-slate-400 mb-1">Tu Nombre</label>
-            <input 
-              type="text" 
+            <input
+              type="text"
               id="username"
-              name="username" 
+              name="username"
               required
               autoComplete="off"
               placeholder="Ej. Juan Pérez"
               className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white placeholder-slate-600 transition-all"
             />
           </div>
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-900 font-bold py-3 px-4 rounded-xl transition-all flex justify-center items-center gap-2 transform active:scale-95"
           >
             Ingresar a la App <Send className="w-4 h-4" />
@@ -679,222 +678,261 @@ function App() {
 
   const renderInicio = () => {
     const enCurso = matches.find(m => m.status === 'EN_CURSO');
-    const finalizados = matches.filter(m => m.status === 'FINALIZADO').sort((a,b) => new Date(b.date) - new Date(a.date));
+    const finalizados = matches.filter(m => m.status === 'FINALIZADO').sort((a, b) => new Date(b.date) - new Date(a.date));
     const featuredMatch = enCurso || finalizados[0];
-  
+
     const now = new Date();
     const pendientes = matches
       .filter(m => m.status === 'PENDIENTE' && new Date(m.date) > now)
-      .sort((a,b) => new Date(a.date) - new Date(b.date));
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
     const nextMatch = pendientes[0];
-    
-    const userTop4 = Object.entries(predictions).filter(([k,v]) => v !== '');
-  
+
+    const userTop4 = Object.entries(predictions).filter(([k, v]) => v !== '');
+
     return (
-      <div className="p-4 md:p-6 lg:p-8 w-full max-w-4xl mx-auto flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-        
-        {/* Scoreboard Gigante */}
-        {featuredMatch && (
-          <div className="bg-slate-800 border border-slate-700 rounded-3xl p-6 md:p-8 shadow-xl relative overflow-hidden">
-            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 to-emerald-400"></div>
-            <div className="flex justify-between items-center mb-8">
-              <span className="text-xs md:text-sm font-bold text-slate-400 uppercase tracking-wider">
-                {featuredMatch.stage} {featuredMatch.group ? `- ${featuredMatch.group}` : ''}
-              </span>
-              <span className={`px-4 py-1.5 rounded-full text-xs font-black tracking-widest ${featuredMatch.status === 'EN_CURSO' ? 'bg-red-500/20 text-red-400 animate-pulse' : 'bg-slate-700 text-slate-300'}`}>
-                {featuredMatch.status === 'EN_CURSO' ? 'EN VIVO' : 'FINALIZADO'}
-              </span>
-            </div>
-            
-            <div className="flex justify-between items-center px-2 md:px-12">
-              <div className="flex flex-col items-center gap-3 w-1/3">
-                <span className="text-6xl md:text-8xl drop-shadow-lg">{getFlag(featuredMatch.team1)}</span>
-                <span className="font-bold text-base md:text-xl text-center">{featuredMatch.team1}</span>
-              </div>
-              
-              <div className="flex flex-col items-center justify-center w-1/3">
-                <div className="flex items-center gap-3 text-6xl md:text-8xl font-black tabular-nums tracking-tighter">
-                  <span className={featuredMatch.score1 > featuredMatch.score2 ? 'text-white' : 'text-slate-300'}>{featuredMatch.score1 ?? '-'}</span>
-                  <span className="text-slate-600 text-4xl pb-2">:</span>
-                  <span className={featuredMatch.score2 > featuredMatch.score1 ? 'text-white' : 'text-slate-300'}>{featuredMatch.score2 ?? '-'}</span>
+      <div className="p-4 md:p-6 lg:p-8 w-full max-w-7xl mx-auto px-2 sm:px-6 flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+          {/* COLUMNA IZQUIERDA: La Acción */}
+          <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-6">
+
+            {/* Scoreboard Gigante */}
+            {featuredMatch && (
+              <div className="bg-slate-800 border border-slate-700 rounded-3xl p-6 md:p-8 shadow-xl relative overflow-hidden">
+                <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 to-emerald-400"></div>
+                <div className="flex justify-between items-center mb-8">
+                  <span className="text-xs md:text-sm font-bold text-slate-400 uppercase tracking-wider">
+                    {featuredMatch.stage} {featuredMatch.group ? `- ${featuredMatch.group}` : ''}
+                  </span>
+                  <span className={`px-4 py-1.5 rounded-full text-xs font-black tracking-widest ${featuredMatch.status === 'EN_CURSO' ? 'bg-red-500/20 text-red-400 animate-pulse' : 'bg-slate-700 text-slate-300'}`}>
+                    {featuredMatch.status === 'EN_CURSO' ? 'EN VIVO' : 'FINALIZADO'}
+                  </span>
                 </div>
-              </div>
-              
-              <div className="flex flex-col items-center gap-3 w-1/3">
-                <span className="text-6xl md:text-8xl drop-shadow-lg">{getFlag(featuredMatch.team2)}</span>
-                <span className="font-bold text-base md:text-xl text-center">{featuredMatch.team2}</span>
-              </div>
-            </div>
-          </div>
-        )}
-  
-        {/* Próximo Partido */}
-        {nextMatch && (
-          <div className="bg-slate-800/80 border border-slate-700 rounded-2xl p-5 flex flex-col md:flex-row items-start md:items-center justify-between shadow-md gap-4">
-            <div className="flex flex-col">
-              <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                <Calendar className="w-4 h-4" /> Próximo Partido
-              </span>
-              <div className="flex items-center gap-3 text-lg md:text-xl font-bold">
-                <span className="text-2xl">{getFlag(nextMatch.team1)}</span> {nextMatch.team1} 
-                <span className="text-slate-500 font-normal mx-1">vs</span> 
-                {nextMatch.team2} <span className="text-2xl">{getFlag(nextMatch.team2)}</span>
-              </div>
-            </div>
-            <div className="flex md:flex-col items-center md:items-end w-full md:w-auto justify-between md:justify-center border-t md:border-t-0 border-slate-700 pt-3 md:pt-0">
-              <span className="text-sm font-medium text-slate-300 capitalize">{getBoliviaTimeData(nextMatch.date).date}</span>
-              <span className="text-2xl font-black font-mono text-emerald-400">{getBoliviaTimeData(nextMatch.date).time}</span>
-            </div>
-          </div>
-        )}
-  
-        {/* Community Predictions */}
-        <div className="mt-2 bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-md">
-          <h3 className="text-lg font-bold mb-6 flex items-center gap-2 border-b border-slate-700 pb-4 text-slate-100">
-            <Users className="w-5 h-5 text-emerald-400" />
-            Predicciones de la Comunidad
-            <span className="ml-auto text-xs font-normal text-slate-400 bg-slate-900 px-3 py-1 rounded-full hidden sm:block">
-              Para el partido {featuredMatch?.status === 'EN_CURSO' ? 'en vivo' : 'reciente'}
-            </span>
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {communityVotes.length > 0 ? (
-              communityVotes.map((pred, idx) => (
-                <div key={idx} className="bg-slate-900/50 border border-slate-700/50 p-4 rounded-xl flex justify-between items-center hover:bg-slate-700/30 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-emerald-900/40 flex items-center justify-center border border-emerald-500/30 text-emerald-400 font-black text-lg">
-                      {pred.usuario.charAt(0).toUpperCase()}
+
+                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-6 w-full mt-4 mb-2 py-2 px-1 md:px-8">
+                  <div className="flex flex-col sm:flex-row items-center justify-end gap-2 sm:gap-4 text-center sm:text-right overflow-hidden">
+                    <span className="text-5xl md:text-8xl drop-shadow-lg">{getFlag(featuredMatch.team1)}</span>
+                    <span className="font-bold text-lg md:text-2xl truncate w-full">{featuredMatch.team1}</span>
+                  </div>
+
+                  <div className="flex items-center justify-center px-2 sm:px-6 font-black text-5xl md:text-8xl shrink-0 tracking-tighter tabular-nums">
+                    <div className="flex items-center gap-2 md:gap-4">
+                      <span className={featuredMatch.score1 > featuredMatch.score2 ? 'text-white' : 'text-slate-300'}>{featuredMatch.score1 ?? '-'}</span>
+                      <span className="text-slate-600 pb-2 md:pb-4 text-4xl md:text-6xl">:</span>
+                      <span className={featuredMatch.score2 > featuredMatch.score1 ? 'text-white' : 'text-slate-300'}>{featuredMatch.score2 ?? '-'}</span>
                     </div>
-                    <span className="font-semibold text-slate-200">{pred.usuario}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {pred.prediccion && pred.prediccion.includes(' - ') ? (
-                      <>
-                        <div className="w-10 h-10 flex items-center justify-center font-mono font-black text-xl bg-slate-900 rounded-lg border border-slate-700 text-emerald-400 shadow-inner">
-                          {pred.prediccion.split(' - ')[0].trim()}
-                        </div>
-                        <span className="text-slate-500 font-bold">-</span>
-                        <div className="w-10 h-10 flex items-center justify-center font-mono font-black text-xl bg-slate-900 rounded-lg border border-slate-700 text-emerald-400 shadow-inner">
-                          {pred.prediccion.split(' - ')[1].trim()}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="font-mono font-bold text-xl bg-slate-900 px-4 py-2 rounded-lg border border-slate-700 text-emerald-400 shadow-inner">
-                        {pred.prediccion}
-                      </div>
-                    )}
+
+                  <div className="flex flex-col sm:flex-row-reverse items-center justify-end gap-2 sm:gap-4 text-center sm:text-left overflow-hidden">
+                    <span className="text-5xl md:text-8xl drop-shadow-lg">{getFlag(featuredMatch.team2)}</span>
+                    <span className="font-bold text-lg md:text-2xl truncate w-full">{featuredMatch.team2}</span>
                   </div>
                 </div>
-              ))
-            ) : (
-              <div className="col-span-1 sm:col-span-2 text-center py-6 text-slate-400">
-                Aún no hay predicciones para este partido. ¡Sé el primero en predecir!
               </div>
             )}
-          </div>
-        </div>
 
-        {/* Tabla de Posiciones Global (Leaderboard) */}
-        <div className="bg-slate-800 rounded-3xl border border-slate-700 p-6 shadow-lg mt-2">
-          <h3 className="text-xl font-black mb-4 flex items-center gap-2 border-b border-slate-700 pb-3 text-slate-100">
-            <Trophy className="w-5 h-5 text-yellow-400" />
-            Tabla de Posiciones Global
-          </h3>
-          {communityLeaderboard.length > 0 ? (
-            <div className="flex flex-col gap-2">
-              {communityLeaderboard.map((item, idx) => {
-                const isMe = user && (user.username === item.usuario || user.name === item.usuario);
-                let positionBadge;
-                if (idx === 0) positionBadge = "🥇";
-                else if (idx === 1) positionBadge = "🥈";
-                else if (idx === 2) positionBadge = "🥉";
-                else positionBadge = <span className="text-slate-500 font-bold">{idx + 1}º</span>;
-
-                return (
-                  <div key={item.usuario} className={`flex items-center justify-between p-3 rounded-xl border ${isMe ? 'bg-emerald-950/60 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'bg-slate-900/50 border-slate-700/50 transition-colors hover:border-slate-600'}`}>
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 text-center text-lg">{positionBadge}</div>
-                      <span className={`font-bold ${isMe ? 'text-emerald-400' : 'text-slate-200'}`}>
-                        {item.usuario}
-                        {isMe && <span className="ml-2 text-[10px] uppercase font-black tracking-wider bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/30">Tú</span>}
-                      </span>
-                    </div>
-                    <div className="bg-emerald-900/40 border border-emerald-500/30 px-3 py-1 rounded-full shadow-inner">
-                      <span className="font-black text-emerald-400">{item.puntos} pts</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="text-center p-8 bg-slate-900/50 rounded-2xl border border-slate-700 border-dashed">
-              <p className="text-slate-400">Aún no hay puntos en la comunidad.</p>
-            </div>
-          )}
-        </div>
-
-        {/* Top 4 de la Comunidad */}
-        <div className="bg-slate-800 rounded-3xl border border-slate-700 p-6 shadow-lg mt-2">
-          <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b border-slate-700 pb-3 text-slate-100">
-            <Medal className="w-5 h-5 text-emerald-400" />
-            Top 4 de la Comunidad
-          </h3>
-          {communityTop4.length > 0 ? (
-            <div className="flex flex-col gap-4">
-              {communityTop4.map((top4Row, idx) => (
-                <div key={idx} className="bg-slate-900/50 border border-slate-700 p-4 rounded-2xl flex flex-col gap-3">
-                  <div className="flex items-center gap-2 border-b border-slate-700 pb-2">
-                    <div className="w-8 h-8 rounded-full bg-emerald-900/40 flex items-center justify-center border border-emerald-500/30 text-emerald-400 font-bold text-sm">
-                      {top4Row.usuario.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="font-bold text-slate-200">{top4Row.usuario}</span>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {[
-                      { l: '1º', team: top4Row.campeon, c: 'text-yellow-400' },
-                      { l: '2º', team: top4Row.subcampeon, c: 'text-slate-300' },
-                      { l: '3º', team: top4Row.tercero, c: 'text-amber-600' },
-                      { l: '4º', team: top4Row.cuarto, c: 'text-slate-500' }
-                    ].map(({l, team, c}) => (
-                      team ? (
-                        <div key={l} className="flex items-center gap-2 bg-slate-800/80 p-2 rounded-lg border border-slate-700/50">
-                          <span className={`text-xs font-black ${c}`}>{l}</span>
-                          <span className="text-xl">{getFlag(team)}</span>
-                          <span className="text-xs font-bold text-slate-200 truncate" title={team}>{team}</span>
-                        </div>
-                      ) : null
-                    ))}
+            {/* Próximo Partido */}
+            {nextMatch && (
+              <div className="bg-slate-800/80 border border-slate-700 rounded-2xl p-5 flex flex-col md:flex-row items-start md:items-center justify-between shadow-md gap-4">
+                <div className="flex flex-col">
+                  <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                    <Calendar className="w-4 h-4" /> Próximo Partido
+                  </span>
+                  <div className="flex items-center gap-3 text-lg md:text-xl font-bold">
+                    <span className="text-2xl">{getFlag(nextMatch.team1)}</span> {nextMatch.team1}
+                    <span className="text-slate-500 font-normal mx-1">vs</span>
+                    {nextMatch.team2} <span className="text-2xl">{getFlag(nextMatch.team2)}</span>
                   </div>
                 </div>
-              ))}
+                <div className="flex md:flex-col items-center md:items-end w-full md:w-auto justify-between md:justify-center border-t md:border-t-0 border-slate-700 pt-3 md:pt-0">
+                  <span className="text-sm font-medium text-slate-300 capitalize">{getBoliviaTimeData(nextMatch.date).date}</span>
+                  <span className="text-2xl font-black font-mono text-emerald-400">{getBoliviaTimeData(nextMatch.date).time}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Top 4 del Usuario (Read-Only) */}
+            <div className="bg-slate-800/80 border border-slate-700 rounded-3xl p-6 shadow-md">
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-slate-100 border-b border-slate-700 pb-3">
+                <Medal className="w-5 h-5 text-emerald-400" /> Mi Top 4 del Torneo
+              </h3>
+              {userTop4.length > 0 ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { id: 'first', label: '1º', team: predictions.first, color: 'text-yellow-400' },
+                    { id: 'second', label: '2º', team: predictions.second, color: 'text-slate-300' },
+                    { id: 'third', label: '3º', team: predictions.third, color: 'text-amber-600' },
+                    { id: 'fourth', label: '4º', team: predictions.fourth, color: 'text-slate-400' }
+                  ].map(pos => pos.team && (
+                    <div key={pos.id} className="flex items-center gap-2 bg-slate-900/50 p-3 rounded-xl border border-slate-700/50">
+                      <span className={`text-sm font-black ${pos.color}`}>{pos.label}</span>
+                      <span className="text-2xl drop-shadow-sm">{getFlag(pos.team)}</span>
+                      <span className="text-xs font-bold text-slate-200 truncate">{pos.team}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center p-4 bg-slate-900/50 rounded-xl border border-slate-700 border-dashed text-sm text-slate-400">
+                  Aún no has elegido tu Top 4. ¡Ve a la pestaña de Predicciones!
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="text-center p-8 bg-slate-900/50 rounded-2xl border border-slate-700 border-dashed">
-              <p className="text-slate-400">Aún no hay predicciones del Top 4 en la comunidad.</p>
+
+          </div>
+
+          {/* COLUMNA DERECHA: La Comunidad */}
+          <div className="lg:col-span-5 xl:col-span-4 flex flex-col gap-6">
+
+            {/* 1. Tabla de Posiciones Global (Leaderboard) */}
+            <div className="bg-slate-800 rounded-3xl border border-slate-700 p-6 shadow-lg">
+              <h3 className="text-xl font-black mb-4 flex items-center gap-2 border-b border-slate-700 pb-3 text-slate-100">
+                <Trophy className="w-5 h-5 text-yellow-400" />
+                Tabla de Posiciones Global
+              </h3>
+              {communityLeaderboard.length > 0 ? (
+                <div className="flex flex-col gap-2">
+                  {communityLeaderboard.map((item, idx) => {
+                    const isMe = user && (user.username === item.usuario || user.name === item.usuario);
+                    let positionBadge;
+                    if (idx === 0) positionBadge = "🥇";
+                    else if (idx === 1) positionBadge = "🥈";
+                    else if (idx === 2) positionBadge = "🥉";
+                    else positionBadge = <span className="text-slate-500 font-bold">{idx + 1}º</span>;
+
+                    return (
+                      <div key={item.usuario} className={`flex items-center justify-between p-3 rounded-xl border ${isMe ? 'bg-emerald-950/60 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'bg-slate-900/50 border-slate-700/50 transition-colors hover:border-slate-600'}`}>
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 text-center text-lg">{positionBadge}</div>
+                          <span className={`font-bold ${isMe ? 'text-emerald-400' : 'text-slate-200'}`}>
+                            {item.usuario}
+                            {isMe && <span className="ml-2 text-[10px] uppercase font-black tracking-wider bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/30">Tú</span>}
+                          </span>
+                        </div>
+                        <div className="bg-emerald-900/40 border border-emerald-500/30 px-3 py-1 rounded-full shadow-inner">
+                          <span className="font-black text-emerald-400">{item.puntos} pts</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center p-8 bg-slate-900/50 rounded-2xl border border-slate-700 border-dashed">
+                  <p className="text-slate-400">Aún no hay puntos en la comunidad.</p>
+                </div>
+              )}
             </div>
-          )}
+
+            {/* 2. Predicciones de la Comunidad */}
+            <div className="bg-slate-800 border border-slate-700 rounded-3xl p-6 shadow-md">
+              <h3 className="text-lg font-bold mb-6 flex items-center gap-2 border-b border-slate-700 pb-4 text-slate-100">
+                <Users className="w-5 h-5 text-emerald-400" />
+                Predicciones de la Comunidad
+                <span className="ml-auto text-xs font-normal text-slate-400 bg-slate-900 px-3 py-1 rounded-full hidden sm:block">
+                  Para el partido {featuredMatch?.status === 'EN_CURSO' ? 'en vivo' : 'reciente'}
+                </span>
+              </h3>
+              <div className="flex flex-col gap-3">
+                {communityVotes.length > 0 ? (
+                  communityVotes.map((pred, idx) => (
+                    <div key={idx} className="bg-slate-900/50 border border-slate-700/50 p-3 rounded-xl flex justify-between items-center hover:bg-slate-700/30 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-emerald-900/40 flex items-center justify-center border border-emerald-500/30 text-emerald-400 font-bold text-sm">
+                          {pred.usuario.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="font-semibold text-sm text-slate-200">{pred.usuario}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {pred.prediccion && pred.prediccion.includes(' - ') ? (
+                          <>
+                            <div className="w-8 h-8 flex items-center justify-center font-mono font-black text-sm bg-slate-900 rounded-lg border border-slate-700 text-emerald-400 shadow-inner">
+                              {pred.prediccion.split(' - ')[0].trim()}
+                            </div>
+                            <span className="text-slate-500 font-bold">-</span>
+                            <div className="w-8 h-8 flex items-center justify-center font-mono font-black text-sm bg-slate-900 rounded-lg border border-slate-700 text-emerald-400 shadow-inner">
+                              {pred.prediccion.split(' - ')[1].trim()}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="font-mono font-bold text-sm bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-700 text-emerald-400 shadow-inner">
+                            {pred.prediccion}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-6 text-sm text-slate-400">
+                    Aún no hay predicciones para este partido. ¡Sé el primero en predecir!
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 3. Top 4 de la Comunidad */}
+            <div className="bg-slate-800 rounded-3xl border border-slate-700 p-6 shadow-lg">
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b border-slate-700 pb-3 text-slate-100">
+                <Medal className="w-5 h-5 text-emerald-400" />
+                Top 4 de la Comunidad
+              </h3>
+              {communityTop4.length > 0 ? (
+                <div className="flex flex-col gap-4">
+                  {communityTop4.map((top4Row, idx) => (
+                    <div key={idx} className="bg-slate-900/50 border border-slate-700 p-4 rounded-2xl flex flex-col gap-3">
+                      <div className="flex items-center gap-2 border-b border-slate-700 pb-2">
+                        <div className="w-8 h-8 rounded-full bg-emerald-900/40 flex items-center justify-center border border-emerald-500/30 text-emerald-400 font-bold text-sm">
+                          {top4Row.usuario.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="font-bold text-slate-200">{top4Row.usuario}</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        {[
+                          { l: '1º', team: top4Row.campeon, c: 'text-yellow-400' },
+                          { l: '2º', team: top4Row.subcampeon, c: 'text-slate-300' },
+                          { l: '3º', team: top4Row.tercero, c: 'text-amber-600' },
+                          { l: '4º', team: top4Row.cuarto, c: 'text-slate-500' }
+                        ].map(({ l, team, c }) => (
+                          team ? (
+                            <div key={l} className="flex items-center gap-2 bg-slate-800/80 p-2 rounded-lg border border-slate-700/50">
+                              <span className={`text-xs font-black ${c}`}>{l}</span>
+                              <span className="text-xl">{getFlag(team)}</span>
+                              <span className="text-xs font-bold text-slate-200 truncate" title={team}>{team}</span>
+                            </div>
+                          ) : null
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center p-8 bg-slate-900/50 rounded-2xl border border-slate-700 border-dashed">
+                  <p className="text-slate-400">Aún no hay predicciones del Top 4 en la comunidad.</p>
+                </div>
+              )}
+            </div>
+
+          </div>
         </div>
-        
       </div>
     );
   };
 
   const renderHorario = () => {
-    const sortedMatches = [...matches].sort((a,b) => new Date(a.date) - new Date(b.date));
+    const sortedMatches = [...matches].sort((a, b) => new Date(a.date) - new Date(b.date));
     const now = new Date();
-    const faseGrupos = sortedMatches.filter(m => 
-      m.status === 'PENDIENTE' && 
-      new Date(m.date) > now && 
+    const faseGrupos = sortedMatches.filter(m =>
+      m.status === 'PENDIENTE' &&
+      new Date(m.date) > now &&
       m.matchType === 'group'
     );
-    const dieciseisavos = sortedMatches.filter(m => 
-      m.status === 'PENDIENTE' && 
-      new Date(m.date) > now && 
+    const dieciseisavos = sortedMatches.filter(m =>
+      m.status === 'PENDIENTE' &&
+      new Date(m.date) > now &&
       m.matchType !== 'group'
     );
     const finalizados = sortedMatches.filter(m => m.status === 'FINALIZADO');
-  
+
     const MatchCard = ({ match }) => {
       const btz = getBoliviaTimeData(match.date);
       return (
@@ -903,23 +941,27 @@ function App() {
             <span className="text-xs font-semibold text-slate-400 capitalize">{btz.date}</span>
             <span className="text-sm md:text-base font-bold text-emerald-400 font-mono">{btz.time}</span>
           </div>
-          
-          <div className="flex items-center justify-center gap-3 md:gap-6 flex-1 w-full">
-            <div className="flex items-center justify-end gap-2 flex-1">
-              <span className="font-bold text-sm md:text-base text-right">{match.team1}</span>
-              <span className="text-2xl md:text-3xl">{getFlag(match.team1)}</span>
-            </div>
-            
-            <div className="bg-slate-900 px-3 md:px-4 py-1.5 md:py-2 rounded-xl border border-slate-700 font-mono font-black text-lg md:text-xl min-w-[5rem] flex flex-row justify-center items-center whitespace-nowrap shadow-inner">
-              {match.score1 !== null ? `${match.score1} : ${match.score2}` : <span className="text-slate-500 text-sm">VS</span>}
-            </div>
 
-            <div className="flex items-center justify-start gap-2 flex-1">
-              <span className="text-2xl md:text-3xl">{getFlag(match.team2)}</span>
-              <span className="font-bold text-sm md:text-base text-left">{match.team2}</span>
+          <div className="flex-1 w-full mt-3 md:mt-0">
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1 sm:gap-3 w-full my-2 py-2 px-1">
+              <div className="flex flex-col sm:flex-row items-center justify-end gap-1 sm:gap-2 text-center sm:text-right overflow-hidden">
+                <span className="text-2xl md:text-3xl drop-shadow-sm">{getFlag(match.team1)}</span>
+                <span className="font-bold text-xs sm:text-base truncate w-full">{match.team1}</span>
+              </div>
+
+              <div className="flex items-center justify-center px-1 sm:px-3 font-black text-lg sm:text-2xl shrink-0 tracking-tighter">
+                <div className="bg-slate-900 px-3 md:px-4 py-1.5 md:py-2 rounded-xl border border-slate-700 font-mono shadow-inner min-w-[5rem] flex flex-row justify-center items-center">
+                  {match.score1 !== null ? `${match.score1} : ${match.score2}` : <span className="text-slate-500 text-sm">VS</span>}
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row-reverse items-center justify-end gap-1 sm:gap-2 text-center sm:text-left overflow-hidden">
+                <span className="text-2xl md:text-3xl drop-shadow-sm">{getFlag(match.team2)}</span>
+                <span className="font-bold text-xs sm:text-base truncate w-full">{match.team2}</span>
+              </div>
             </div>
           </div>
-    
+
           <div className="hidden md:flex w-1/4 justify-end">
             {match.group && (
               <span className="px-3 py-1 bg-slate-900 border border-slate-700 rounded-lg text-xs font-bold text-slate-300">
@@ -930,14 +972,14 @@ function App() {
         </div>
       );
     };
-  
+
     return (
-      <div className="p-4 md:p-6 lg:p-8 w-full max-w-4xl mx-auto flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
-        
+      <div className="p-4 md:p-6 lg:p-8 w-full max-w-7xl mx-auto px-2 sm:px-6 flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+
         {/* Histórico Expansible */}
         {finalizados.length > 0 && (
           <section className="bg-slate-800/60 p-4 md:p-6 rounded-3xl border border-slate-700">
-            <button 
+            <button
               onClick={() => setShowHistory(!showHistory)}
               className="w-full flex items-center justify-between text-lg md:text-xl font-black uppercase tracking-widest text-slate-200 focus:outline-none transition-colors hover:text-emerald-400"
             >
@@ -949,38 +991,38 @@ function App() {
                 {showHistory ? <ChevronUp className="w-5 h-5 text-slate-300" /> : <ChevronDown className="w-5 h-5 text-slate-300" />}
               </div>
             </button>
-            
+
             {showHistory && (
-              <div className="flex flex-col gap-4 mt-6 animate-in slide-in-from-top-2 duration-200">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-6 animate-in slide-in-from-top-2 duration-200 items-start">
                 {finalizados.map(m => {
                   const uPred = matchPredictions[m.id];
                   const uPredStr = uPred && uPred.score1 !== undefined && uPred.score2 !== undefined && uPred.score1 !== '' && uPred.score2 !== '' ? `${uPred.score1} - ${uPred.score2}` : 'Sin predicción';
                   const ptsResult = uPredStr !== 'Sin predicción' ? calculatePoints(m.score1, m.score2, uPred.score1, uPred.score2) : null;
                   const btz = getBoliviaTimeData(m.date);
-                  
+
                   return (
                     <div key={m.id} className="bg-slate-800 border border-slate-600 p-4 rounded-xl flex flex-col gap-3 shadow-md">
                       <div className="flex justify-between items-center text-sm border-b border-slate-700 pb-2">
                         <span className="font-semibold text-slate-400">{btz.date}</span>
                         <span className="font-bold text-slate-500">{m.stage}</span>
                       </div>
-                      
+
                       <div className="flex items-center justify-between gap-4 py-2">
                         <div className="flex items-center justify-end gap-2 flex-1">
                           <span className="font-bold text-sm md:text-base">{m.team1}</span>
                           <span className="text-2xl">{getFlag(m.team1)}</span>
                         </div>
-                        
+
                         <div className="bg-slate-900 px-4 py-2 rounded-xl border border-slate-600 font-mono font-black text-xl min-w-[5rem] text-center shadow-inner">
                           {m.score1} : {m.score2}
                         </div>
-  
+
                         <div className="flex items-center justify-start gap-2 flex-1">
                           <span className="text-2xl">{getFlag(m.team2)}</span>
                           <span className="font-bold text-sm md:text-base">{m.team2}</span>
                         </div>
                       </div>
-                      
+
                       <div className="flex flex-col gap-3 mt-2">
                         <div className="flex-1 bg-slate-900/60 p-3 rounded-lg border border-slate-700/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                           <div className="flex flex-col">
@@ -989,7 +1031,7 @@ function App() {
                               <span className={`font-mono font-bold text-lg ${uPredStr !== 'Sin predicción' ? 'text-emerald-400' : 'text-slate-500'}`}>{uPredStr}</span>
                             </div>
                           </div>
-                          
+
                           {ptsResult && (
                             <div className={`px-3 py-1.5 rounded-full border text-sm font-bold flex items-center gap-2 ${ptsResult.color}`}>
                               <span className="font-mono">{ptsResult.points > 0 ? `+${ptsResult.points}` : '0'} pts</span>
@@ -1012,11 +1054,11 @@ function App() {
             <div className="w-2 h-6 bg-emerald-500 rounded-full"></div>
             Fase de Grupos
           </h2>
-          <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
             {faseGrupos.map(m => <MatchCard key={m.id} match={m} />)}
           </div>
         </section>
-  
+
         {/* Torneo */}
         <section className="bg-slate-800/30 p-4 md:p-6 rounded-3xl border border-slate-800">
           <h2 className="text-3xl font-black mb-2 uppercase tracking-widest text-slate-100 flex items-center gap-3">
@@ -1026,41 +1068,41 @@ function App() {
           <h3 className="text-lg font-bold text-emerald-400 mb-6 uppercase tracking-wide ml-11">
             Fase Final
           </h3>
-          
-          <div className="flex flex-col gap-3">
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
             {dieciseisavos.map(m => <MatchCard key={m.id} match={m} />)}
           </div>
         </section>
-  
+
       </div>
     );
   };
 
   const renderPuntuaciones = () => (
-    <div className="p-4 md:p-6 lg:p-8 w-full max-w-4xl mx-auto flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+    <div className="w-full max-w-6xl mx-auto px-2 sm:px-6 py-4">
       <h2 className="text-3xl font-black mb-2 uppercase tracking-wide text-slate-100 flex items-center gap-3 border-b border-slate-700 pb-4">
         <ListOrdered className="w-8 h-8 text-emerald-400" />
         Tablas de Posiciones
       </h2>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         {groupsData.map((group) => (
-          <div key={group.group} className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden shadow-lg">
+          <div key={group.group} className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden shadow-lg p-2 sm:p-3">
             <div className="bg-slate-900/80 px-5 py-4 border-b border-slate-700 font-black text-slate-200 tracking-wider">
               {group.group}
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm whitespace-nowrap">
+              <table className="w-full table-fixed border-collapse text-xs sm:text-sm">
                 <thead className="bg-slate-800 text-slate-400 text-xs">
                   <tr>
-                    <th className="px-5 py-3 font-semibold w-full">Equipo</th>
-                    <th className="px-3 py-3 text-center font-semibold">PJ</th>
-                    <th className="px-3 py-3 text-center font-semibold">DG</th>
-                    <th className="px-5 py-3 text-center font-black text-emerald-400 text-sm">Pts</th>
+                    <th className="text-left pl-2 text-slate-400 font-normal">Equipo</th>
+                    <th className="w-12 text-center text-slate-400 font-normal">PJ</th>
+                    <th className="w-12 text-center text-slate-400 font-normal">DG</th>
+                    <th className="w-12 text-center font-bold text-emerald-400 pr-1">Pts</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-700/50">
-                  {group.teams.sort((a,b) => b.pts - a.pts).map((team, idx) => (
+                  {group.teams.sort((a, b) => b.pts - a.pts).map((team, idx) => (
                     <tr key={team.name} className="hover:bg-slate-700/30 transition-colors">
                       <td className="px-5 py-3.5 flex items-center gap-3">
                         <span className={`font-mono text-xs w-4 font-bold ${idx < 2 ? 'text-emerald-400' : 'text-slate-500'}`}>
@@ -1071,7 +1113,7 @@ function App() {
                         ) : (
                           <span className="text-2xl drop-shadow-sm">{team.flag}</span>
                         )}
-                        <span className="font-bold text-slate-200">{team.name}</span>
+                        <span className="block font-bold text-slate-100 whitespace-nowrap">{team.name}</span>
                       </td>
                       <td className="px-3 py-3 text-center text-slate-400">{team.pj}</td>
                       <td className="px-3 py-3 text-center text-slate-400 font-mono">
@@ -1094,23 +1136,22 @@ function App() {
     const top4Locked = isTop4Locked();
 
     return (
-      <div className="p-4 md:p-6 lg:p-8 w-full max-w-4xl mx-auto flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
-        
+      <div className="p-4 md:p-6 lg:p-8 w-full max-w-7xl mx-auto px-2 sm:px-6 flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+
         {/* Floating Action Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sticky top-[4.5rem] z-10 bg-slate-900/95 backdrop-blur-md p-4 rounded-2xl border border-slate-700 shadow-[0_8px_30px_rgb(0,0,0,0.12)]">
           <h2 className="text-2xl font-black uppercase tracking-wide text-slate-100 flex items-center gap-2">
             <Edit3 className="w-6 h-6 text-emerald-400" />
             Mis Predicciones
           </h2>
-          <button 
+          <button
             id="btn-save"
             onClick={handleSavePredictions}
             disabled={!hasUnsavedChanges}
-            className={`flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-all w-full sm:w-auto ${
-              hasUnsavedChanges 
-                ? 'bg-emerald-500 hover:bg-emerald-600 text-slate-900 shadow-lg shadow-emerald-500/20 transform active:scale-95' 
+            className={`flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-all w-full sm:w-auto ${hasUnsavedChanges
+                ? 'bg-emerald-500 hover:bg-emerald-600 text-slate-900 shadow-lg shadow-emerald-500/20 transform active:scale-95'
                 : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
-            }`}
+              }`}
           >
             <Save className="w-5 h-5" />
             Guardar Predicciones
@@ -1137,8 +1178,8 @@ function App() {
                   {top4Locked && <span className="text-xs text-red-400 bg-red-900/30 px-2 py-0.5 rounded border border-red-500/20">Bloqueado</span>}
                 </label>
                 <div className="relative">
-                  <select 
-                    value={predictions[pos.id] || ''} 
+                  <select
+                    value={predictions[pos.id] || ''}
                     disabled={top4Locked}
                     onChange={(e) => {
                       setPredictions({ ...predictions, [pos.id]: e.target.value });
@@ -1175,59 +1216,62 @@ function App() {
             <Calendar className="w-5 h-5 text-emerald-400" />
             Pronósticos de Próximos Partidos
           </h3>
-          <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
             {pendientes.map(m => {
               const locked = isMatchLocked(m);
               return (
-                <div key={m.id} className={`bg-slate-900/40 p-4 rounded-xl border flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors ${locked ? 'border-slate-800 opacity-80' : 'border-slate-700/50 hover:border-slate-600'}`}>
-                  
-                  <div className="flex items-center justify-end w-full sm:w-2/5 gap-3 relative">
-                      {locked && <Lock className="w-4 h-4 text-red-400 absolute left-0 opacity-70" title="Partido Bloqueado" />}
-                      <span className="font-bold text-sm md:text-base">{m.team1}</span>
-                      <span className="text-3xl drop-shadow-sm">{getFlag(m.team1)}</span>
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                      <input 
-                        type="number" 
-                        min="0"
-                        max="20"
-                        disabled={locked}
-                        placeholder="-"
-                        value={matchPredictions[m.id]?.score1 ?? ''}
-                        onChange={(e) => {
-                          setMatchPredictions({
-                            ...matchPredictions, 
-                            [m.id]: { ...matchPredictions[m.id], score1: e.target.value }
-                          });
-                          setHasUnsavedChanges(true);
-                        }}
-                        className={`w-14 h-14 md:w-16 md:h-16 border rounded-xl text-center font-black text-2xl focus:ring-2 focus:outline-none transition-shadow ${locked ? 'bg-slate-900/50 border-slate-700 text-slate-500 cursor-not-allowed' : 'bg-slate-800 border-slate-600 text-slate-100 focus:ring-emerald-500'}`} 
-                      />
-                      <span className="text-slate-600 font-black px-1">-</span>
-                      <input 
-                        type="number" 
-                        min="0"
-                        max="20"
-                        disabled={locked}
-                        placeholder="-"
-                        value={matchPredictions[m.id]?.score2 ?? ''}
-                        onChange={(e) => {
-                          setMatchPredictions({
-                            ...matchPredictions, 
-                            [m.id]: { ...matchPredictions[m.id], score2: e.target.value }
-                          });
-                          setHasUnsavedChanges(true);
-                        }}
-                        className={`w-14 h-14 md:w-16 md:h-16 border rounded-xl text-center font-black text-2xl focus:ring-2 focus:outline-none transition-shadow ${locked ? 'bg-slate-900/50 border-slate-700 text-slate-500 cursor-not-allowed' : 'bg-slate-800 border-slate-600 text-slate-100 focus:ring-emerald-500'}`} 
-                      />
-                  </div>
-                  
-                  <div className="flex items-center justify-start w-full sm:w-2/5 gap-3">
-                      <span className="text-3xl drop-shadow-sm">{getFlag(m.team2)}</span>
-                      <span className="font-bold text-sm md:text-base">{m.team2}</span>
-                  </div>
+                <div key={m.id} className={`bg-slate-900/40 p-2 sm:p-4 rounded-xl border relative transition-colors ${locked ? 'border-slate-800 opacity-80' : 'border-slate-700/50 hover:border-slate-600'}`}>
+                  {locked && <Lock className="w-4 h-4 text-red-400 absolute top-2 left-2 opacity-70" title="Partido Bloqueado" />}
 
+                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1 sm:gap-3 w-full my-2 py-2 px-1">
+                    <div className="flex flex-col sm:flex-row items-center justify-end gap-1 sm:gap-2 text-center sm:text-right overflow-hidden">
+                      <span className="text-3xl sm:text-4xl drop-shadow-sm">{getFlag(m.team1)}</span>
+                      <span className="font-bold text-xs sm:text-base truncate w-full">{m.team1}</span>
+                    </div>
+
+                    <div className="flex items-center justify-center px-1 sm:px-3 shrink-0">
+                      <div className="flex items-center gap-1 sm:gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          max="20"
+                          disabled={locked}
+                          placeholder="-"
+                          value={matchPredictions[m.id]?.score1 ?? ''}
+                          onChange={(e) => {
+                            setMatchPredictions({
+                              ...matchPredictions,
+                              [m.id]: { ...matchPredictions[m.id], score1: e.target.value }
+                            });
+                            setHasUnsavedChanges(true);
+                          }}
+                          className={`w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 border rounded-xl text-center font-black text-xl sm:text-2xl focus:ring-2 focus:outline-none transition-shadow ${locked ? 'bg-slate-900/50 border-slate-700 text-slate-500 cursor-not-allowed' : 'bg-slate-800 border-slate-600 text-slate-100 focus:ring-emerald-500'}`}
+                        />
+                        <span className="text-slate-600 font-black px-1">-</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="20"
+                          disabled={locked}
+                          placeholder="-"
+                          value={matchPredictions[m.id]?.score2 ?? ''}
+                          onChange={(e) => {
+                            setMatchPredictions({
+                              ...matchPredictions,
+                              [m.id]: { ...matchPredictions[m.id], score2: e.target.value }
+                            });
+                            setHasUnsavedChanges(true);
+                          }}
+                          className={`w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 border rounded-xl text-center font-black text-xl sm:text-2xl focus:ring-2 focus:outline-none transition-shadow ${locked ? 'bg-slate-900/50 border-slate-700 text-slate-500 cursor-not-allowed' : 'bg-slate-800 border-slate-600 text-slate-100 focus:ring-emerald-500'}`}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row-reverse items-center justify-end gap-1 sm:gap-2 text-center sm:text-left overflow-hidden">
+                      <span className="text-3xl sm:text-4xl drop-shadow-sm">{getFlag(m.team2)}</span>
+                      <span className="font-bold text-xs sm:text-base truncate w-full">{m.team2}</span>
+                    </div>
+                  </div>
                 </div>
               );
             })}
@@ -1263,21 +1307,20 @@ function App() {
   const renderNavbar = () => (
     <nav className="fixed bottom-0 w-full bg-slate-800/95 backdrop-blur-md border-t border-slate-700 pb-safe z-30 shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.3)]">
       <div className="flex justify-around items-center p-2 max-w-2xl mx-auto w-full">
-        
+
         {[
           { id: 'inicio', icon: Home, label: 'Inicio' },
           { id: 'horario', icon: Calendar, label: 'Horario' },
           { id: 'puntuaciones', icon: ListOrdered, label: 'Grupos' },
           { id: 'predicciones', icon: Edit3, label: 'Predecir', alert: hasUnsavedChanges }
         ].map(tab => (
-          <button 
+          <button
             key={tab.id}
             onClick={() => handleTabChange(tab.id)}
-            className={`flex flex-col items-center justify-center p-2 w-[72px] md:w-24 rounded-2xl transition-all duration-300 relative ${
-              currentTab === tab.id 
-                ? 'text-emerald-400 bg-emerald-500/10 scale-105' 
+            className={`flex flex-col items-center justify-center p-2 w-[72px] md:w-24 rounded-2xl transition-all duration-300 relative ${currentTab === tab.id
+                ? 'text-emerald-400 bg-emerald-500/10 scale-105'
                 : 'text-slate-400 hover:text-slate-300 hover:bg-slate-700/50'
-            }`}
+              }`}
           >
             {tab.alert && currentTab !== tab.id && (
               <span className="absolute top-1 right-2 md:right-5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-800"></span>
@@ -1295,7 +1338,7 @@ function App() {
 
   const renderFooterAlert = () => {
     if (queueLength === 0 && !isSyncing) return null;
-    
+
     return (
       <div className="fixed bottom-24 left-4 right-4 z-20 mx-auto max-w-md bg-slate-800 border border-slate-700 p-3 rounded-xl shadow-2xl text-sm flex justify-center items-center">
         {isSyncing ? (
@@ -1316,7 +1359,7 @@ function App() {
   return (
     <div className="min-h-screen flex flex-col bg-slate-900 text-slate-50 font-sans selection:bg-emerald-500/30">
       {renderHeader()}
-      
+
       <main className="flex-1 pb-28">
         {!user ? (
           showLogin ? renderLogin() : renderLandingPage()
@@ -1328,8 +1371,8 @@ function App() {
       {/* Flechas Flotantes de Navegación Vertical */}
       <div className={`fixed bottom-24 right-6 flex flex-col gap-3 z-50 transition-opacity duration-300 ${showArrows ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
         {canScrollUp && (
-          <button 
-            onClick={scrollToTop} 
+          <button
+            onClick={scrollToTop}
             className="p-3 bg-emerald-600/90 hover:bg-emerald-500 text-white rounded-full shadow-lg border border-emerald-400 backdrop-blur-sm transition-transform hover:scale-110 flex items-center justify-center"
             title="Ir arriba"
           >
@@ -1337,8 +1380,8 @@ function App() {
           </button>
         )}
         {canScrollDown && (
-          <button 
-            onClick={scrollToBottom} 
+          <button
+            onClick={scrollToBottom}
             className="p-3 bg-emerald-600/90 hover:bg-emerald-500 text-white rounded-full shadow-lg border border-emerald-400 backdrop-blur-sm transition-transform hover:scale-110 flex items-center justify-center"
             title="Ir abajo"
           >
