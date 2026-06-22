@@ -182,16 +182,7 @@ export const fetchLiveMatches = async () => {
     let score1 = (game.home_score === 'null' || game.home_score === null || game.home_score === undefined) ? null : Number(game.home_score);
     let score2 = (game.away_score === 'null' || game.away_score === null || game.away_score === undefined) ? null : Number(game.away_score);
 
-    // Forzar orden alfabético para garantizar integridad entre local y visitante
-    if (team1En > team2En) {
-      const tempTeam = team1En;
-      team1En = team2En;
-      team2En = tempTeam;
 
-      const tempScore = score1;
-      score1 = score2;
-      score2 = tempScore;
-    }
     
     const team1 = TEAM_DICTIONARY[team1En] ? TEAM_DICTIONARY[team1En].es : team1En;
     const team2 = TEAM_DICTIONARY[team2En] ? TEAM_DICTIONARY[team2En].es : team2En;

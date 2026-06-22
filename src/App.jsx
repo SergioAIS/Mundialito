@@ -78,6 +78,7 @@ function App() {
   // Estado para la comunidad SQL
   const [communityVotes, setCommunityVotes] = useState([]);
   const [communityTop4, setCommunityTop4] = useState([]);
+  const [communityLeaderboard, setCommunityLeaderboard] = useState([]);
 
   // Estado para flechas de navegación
   const [showArrows, setShowArrows] = useState(false);
@@ -205,6 +206,46 @@ function App() {
     setQueueLength(offlineStorage.getQueue().length);
   }, []);
 
+  const calculateGlobalLeaderboard = async (allMatches) => {
+    try {
+      const { data: allBets, error } = await supabase.from('predicciones_comunidad').select('*');
+      if (error || !allBets) return;
+
+      const finishedMatches = allMatches.filter(m => m.status === 'FINALIZADO');
+      const finishedMap = {};
+      finishedMatches.forEach(m => {
+        finishedMap[m.id] = { score1: m.score1, score2: m.score2 };
+      });
+
+      const userPoints = {};
+      allBets.forEach(bet => {
+        if (userPoints[bet.usuario] === undefined) {
+          userPoints[bet.usuario] = 0;
+        }
+      });
+
+      allBets.forEach(bet => {
+        const matchData = finishedMap[bet.partido_id];
+        if (matchData && bet.prediccion && bet.prediccion.includes(' - ')) {
+          const [ps1, ps2] = bet.prediccion.split(' - ').map(s => s.trim());
+          const pts = calculatePoints(matchData.score1, matchData.score2, ps1, ps2);
+          if (pts && pts.points) {
+            userPoints[bet.usuario] += pts.points;
+          }
+        }
+      });
+
+      const leaderboard = Object.keys(userPoints).map(user => ({
+        usuario: user,
+        puntos: userPoints[user]
+      })).sort((a, b) => b.puntos - a.puntos);
+
+      setCommunityLeaderboard(leaderboard);
+    } catch (err) {
+      console.error("Error calculando leaderboard:", err);
+    }
+  };
+
   // Cargar datos de la API y auto-sincronizar cada 2 minutos
   useEffect(() => {
     const initApp = async () => {
@@ -221,6 +262,9 @@ function App() {
         if (!top4Res.error && top4Res.data) {
           setCommunityTop4(top4Res.data);
         }
+
+        // Calcular Leaderboard global
+        await calculateGlobalLeaderboard(matchesRes);
       } catch (error) {
         console.error("Error al cargar la aplicación", error);
       } finally {
@@ -748,6 +792,45 @@ function App() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Tabla de Posiciones Global (Leaderboard) */}
+        <div className="bg-slate-800 rounded-3xl border border-slate-700 p-6 shadow-lg mt-2">
+          <h3 className="text-xl font-black mb-4 flex items-center gap-2 border-b border-slate-700 pb-3 text-slate-100">
+            <Trophy className="w-5 h-5 text-yellow-400" />
+            Tabla de Posiciones Global
+          </h3>
+          {communityLeaderboard.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              {communityLeaderboard.map((item, idx) => {
+                const isMe = user && (user.username === item.usuario || user.name === item.usuario);
+                let positionBadge;
+                if (idx === 0) positionBadge = "🥇";
+                else if (idx === 1) positionBadge = "🥈";
+                else if (idx === 2) positionBadge = "🥉";
+                else positionBadge = <span className="text-slate-500 font-bold">{idx + 1}º</span>;
+
+                return (
+                  <div key={item.usuario} className={`flex items-center justify-between p-3 rounded-xl border ${isMe ? 'bg-emerald-950/60 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'bg-slate-900/50 border-slate-700/50 transition-colors hover:border-slate-600'}`}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 text-center text-lg">{positionBadge}</div>
+                      <span className={`font-bold ${isMe ? 'text-emerald-400' : 'text-slate-200'}`}>
+                        {item.usuario}
+                        {isMe && <span className="ml-2 text-[10px] uppercase font-black tracking-wider bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/30">Tú</span>}
+                      </span>
+                    </div>
+                    <div className="bg-emerald-900/40 border border-emerald-500/30 px-3 py-1 rounded-full shadow-inner">
+                      <span className="font-black text-emerald-400">{item.puntos} pts</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center p-8 bg-slate-900/50 rounded-2xl border border-slate-700 border-dashed">
+              <p className="text-slate-400">Aún no hay puntos en la comunidad.</p>
+            </div>
+          )}
         </div>
 
         {/* Top 4 de la Comunidad */}
