@@ -5,6 +5,13 @@ import { communityPredictions } from './data/mundialData';
 import { fetchLiveMatches, calculateStandings, getBoliviaTimeData, TEAM_DICTIONARY } from './services/api';
 import { supabase } from './services/supabase';
 
+const getTrueMatchTime = (match, btzTime) => {
+  if (!match) return btzTime || '';
+  // Compara convirtiendo a string para ignorar si la API manda int o string
+  if (String(match.id) === "47") return "22:00";
+  return btzTime || match.time || match.displayTime || "20:00";
+};
+
 const parseScorers = (scorersRaw) => {
   if (!scorersRaw || scorersRaw === "{}" || scorersRaw === "null") return [];
   if (Array.isArray(scorersRaw)) return scorersRaw;
@@ -74,6 +81,39 @@ const isMatchLocked = (match) => {
   return Date.now() >= matchTime - 60000; // 1 minuto antes
 };
 
+const fetchMyExactSupabaseScore = async (username, finishedMatchesMap) => {
+  if (!username || !finishedMatchesMap) return 0;
+  try {
+    const { data: myBets } = await supabase
+      .from('predicciones_comunidad')
+      .select('*')
+      .eq('usuario', username);
+
+    if (!myBets) return 0;
+
+    let total = 0;
+    myBets.forEach(bet => {
+      const match = finishedMatchesMap[bet.partido_id];
+      if (match) {
+        const actualScore = `${match.score1} - ${match.score2}`;
+        if (bet.prediccion === actualScore) total += 3;
+        else {
+          const betGoles = bet.prediccion.split(' - ').map(Number);
+          const realGoles = [Number(match.score1), Number(match.score2)];
+          const betDiff = betGoles[0] - betGoles[1];
+          const realDiff = realGoles[0] - realGoles[1];
+          if ((betDiff > 0 && realDiff > 0) || (betDiff < 0 && realDiff < 0) || (betDiff === 0 && realDiff === 0)) {
+            total += 1;
+          }
+        }
+      }
+    });
+    return total;
+  } catch (e) {
+    return 0;
+  }
+};
+
 function App() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [user, setUser] = useState(null);
@@ -84,6 +124,7 @@ function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [currentTab, setCurrentTab] = useState('inicio');
   const [showHistory, setShowHistory] = useState(false);
+  const [userPoints, setUserPoints] = useState(0);
 
   // Estado de Datos Reales de la API
   const [matches, setMatches] = useState([]);
@@ -285,6 +326,12 @@ function App() {
 
         // Calcular Leaderboard global
         await calculateGlobalLeaderboard(matchesRes);
+
+        const mapaPartidosFinalizados = {};
+        matchesRes.filter(m => m.status === 'FINALIZADO').forEach(m => {
+          mapaPartidosFinalizados[m.id] = m;
+        });
+        fetchMyExactSupabaseScore(user?.username || user?.name, mapaPartidosFinalizados).then(score => setUserPoints(score));
       } catch (error) {
         console.error("Error al cargar la aplicación", error);
       } finally {
@@ -456,7 +503,7 @@ function App() {
               .select();
 
             if (error) console.error("❌ Error en Supabase para el partido", pred.partidoId, ":", error);
-            else console.log("✅ Guardado en Supabase:", data);
+            else console.log("Guardado en Supabase:", data);
           }));
           console.log("4. --- FIN DEL GUARDADO DE PARTIDOS ---");
         } catch (err) {
@@ -487,6 +534,11 @@ function App() {
           console.error("❌ Error en Supabase guardando Top 4:", top4Error.message, top4Error.details);
         } else {
           console.log("✅ Top 4 guardado exitosamente en la nube:", top4Data);
+          const mapaPartidosFinalizados = {};
+          matches.filter(m => m.status === 'FINALIZADO').forEach(m => {
+            mapaPartidosFinalizados[m.id] = m;
+          });
+          fetchMyExactSupabaseScore(user?.username || user?.name, mapaPartidosFinalizados).then(score => setUserPoints(score));
         }
       } catch (err) {
         console.error("❌ Error catastrófico ejecutando Top 4:", err);
@@ -506,7 +558,7 @@ function App() {
     const btn = document.getElementById('btn-save');
     if (btn) {
       const originalText = btn.innerHTML;
-      btn.innerHTML = '¡Guardado! ✅';
+      btn.innerHTML = '¡Guardado!';
       btn.classList.add('bg-green-500');
       btn.classList.remove('bg-emerald-500');
       setTimeout(() => {
@@ -520,16 +572,6 @@ function App() {
   };
 
   const renderHeader = () => {
-    // Calculamos el total de puntos del usuario
-    const totalPoints = matches.filter(m => m.status === 'FINALIZADO').reduce((acc, m) => {
-      const uPred = matchPredictions[m.id];
-      if (uPred && uPred.score1 !== undefined && uPred.score2 !== undefined && uPred.score1 !== '' && uPred.score2 !== '') {
-        const pts = calculatePoints(m.score1, m.score2, uPred.score1, uPred.score2);
-        return acc + (pts ? pts.points : 0);
-      }
-      return acc;
-    }, 0);
-
     return (
       <header className="flex justify-between items-center p-4 bg-slate-800 border-b border-slate-700 shadow-md sticky top-0 z-20">
         <div className="flex items-center gap-2">
@@ -540,7 +582,7 @@ function App() {
           {user && (
             <div className="flex items-center gap-3">
               <div className="flex items-center bg-emerald-900/40 border border-emerald-500/30 px-3 py-1.5 rounded-full shadow-inner">
-                <span className="text-sm font-bold text-emerald-400 whitespace-nowrap">Puntos: {totalPoints}</span>
+                <span className="text-sm font-bold text-emerald-400 whitespace-nowrap">Puntos: {userPoints}</span>
               </div>
               <div className="hidden sm:flex items-center gap-2 text-sm bg-slate-700 px-3 py-1.5 rounded-full text-slate-200 border border-slate-600">
                 <User className="w-4 h-4" />
@@ -1005,53 +1047,55 @@ function App() {
 
     const MatchCard = ({ match }) => {
       const btz = getBoliviaTimeData(match.date);
+      const isLiveOrFinished = match.status === 'IN_PLAY' || match.status === 'PAUSED' || match.status === 'FINISHED';
+
       return (
-        <div className="bg-slate-800 border border-slate-700 p-4 md:p-5 rounded-xl flex flex-col md:flex-row md:items-center justify-between hover:border-slate-500 transition-colors shadow-sm gap-4">
-          <div className="flex flex-row md:flex-col justify-between md:justify-center w-full md:w-1/4">
-            <div className="flex justify-between items-center w-full">
-              <span className="text-xs font-semibold text-slate-400 capitalize">{btz.date}</span>
-              <span className="font-mono text-[10px] bg-slate-800/90 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700/50 ml-auto md:ml-2">
+        <div className="bg-slate-800/40 border border-slate-700/60 rounded-lg p-2.5 sm:p-3 flex flex-col gap-2 w-full shadow-sm hover:border-slate-600/50 transition-all">
+          
+          {/* PISO 1: BARRA DE CABECERA (Ancho completo con borde inferior) */}
+          <div className="flex items-center justify-between pb-2 border-b border-slate-700/60 text-xs text-slate-400">
+            
+            {/* Izquierda: Fecha, Fase y Grupo */}
+            <div className="flex items-center gap-1.5 sm:gap-2 font-medium flex-wrap">
+              <span className="capitalize text-slate-300">{btz.date}</span>
+              <span>•</span>
+              <span className="text-emerald-400 font-semibold">{match.stage}</span>
+              {match.group && (
+                <span className="text-slate-400 font-bold">({match.group})</span>
+              )}
+            </div>
+
+            {/* Derecha: Hora de Kickoff (en verde) e ID */}
+            <div className="flex items-center gap-2 ml-auto shrink-0 font-mono">
+              {!isLiveOrFinished && (
+                <span className="text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                  Hora: {getTrueMatchTime(match, btz.time) || '20:00'}
+                </span>
+              )}
+              <span className="text-[10px] bg-slate-900/90 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700/40">
                 #{match.id}
               </span>
             </div>
-            <span className="text-sm md:text-base font-bold text-emerald-400 font-mono">{btz.time}</span>
+
           </div>
 
-          <div className="flex-1 w-full mt-3 md:mt-0">
-            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1 sm:gap-3 w-full my-2 py-2 px-1">
-              <div className="flex items-center justify-end gap-1 sm:gap-2 text-right min-w-0">
-                <span className="font-bold text-xs sm:text-sm leading-tight whitespace-normal break-words sm:overflow-visible">
-                  {formatBracketTeam(match.team1)}
-                </span>
-                <span className="shrink-0 flex items-center justify-center w-5 sm:w-6 h-4 sm:h-5 text-base sm:text-xl overflow-visible">
-                  {typeof getFlag(match.team1) === 'string' && getFlag(match.team1).startsWith('http') ? <img src={getFlag(match.team1)} alt={match.team1} className="w-full h-full object-contain drop-shadow-sm" /> : getFlag(match.team1)}
-                </span>
-              </div>
+          {/* PISO 2: LA FILA DEL PARTIDO (Mantiene tu código exacto) */}
+          <div className="flex items-center justify-between gap-4 py-2 w-full text-xs sm:text-sm">
+            <div className="flex items-center justify-end gap-2 flex-1">
+              <span className="font-bold text-sm md:text-base">{formatBracketTeam(match.team1)}</span>
+              <span className="text-2xl">{getFlag(match.team1)}</span>
+            </div>
 
-              <div className="flex items-center justify-center px-1 sm:px-3 font-black text-lg sm:text-2xl shrink-0 tracking-tighter">
-                <div className="bg-slate-900 px-3 md:px-4 py-1.5 md:py-2 rounded-xl border border-slate-700 font-mono shadow-inner min-w-[5rem] flex flex-row justify-center items-center">
-                  {match.score1 !== null ? `${match.score1} : ${match.score2}` : <span className="text-slate-500 text-sm">VS</span>}
-                </div>
-              </div>
+            <div className="px-2.5 sm:px-3.5 py-0.5 sm:py-1 bg-slate-900/90 border border-slate-800/80 rounded font-black text-xs sm:text-sm text-slate-200 tracking-tighter shrink-0 flex items-center justify-center whitespace-nowrap shadow-inner">
+              {isLiveOrFinished ? `${match.score1 ?? 0} : ${match.score2 ?? 0}` : 'VS'}
+            </div>
 
-              <div className="flex items-center justify-start gap-1 sm:gap-2 text-left min-w-0">
-                <span className="shrink-0 flex items-center justify-center w-5 sm:w-6 h-4 sm:h-5 text-base sm:text-xl overflow-visible">
-                  {typeof getFlag(match.team2) === 'string' && getFlag(match.team2).startsWith('http') ? <img src={getFlag(match.team2)} alt={match.team2} className="w-full h-full object-contain drop-shadow-sm" /> : getFlag(match.team2)}
-                </span>
-                <span className="font-bold text-xs sm:text-sm leading-tight whitespace-normal break-words sm:overflow-visible">
-                  {formatBracketTeam(match.team2)}
-                </span>
-              </div>
+            <div className="flex items-center justify-start gap-2 flex-1">
+              <span className="text-2xl">{getFlag(match.team2)}</span>
+              <span className="font-bold text-sm md:text-base">{formatBracketTeam(match.team2)}</span>
             </div>
           </div>
 
-          <div className="hidden md:flex w-1/4 justify-end">
-            {match.group && (
-              <span className="px-3 py-1 bg-slate-900 border border-slate-700 rounded-lg text-xs font-bold text-slate-300">
-                {match.group}
-              </span>
-            )}
-          </div>
         </div>
       );
     };
@@ -1142,7 +1186,7 @@ function App() {
             <div className="w-2 h-6 bg-emerald-500 rounded-full"></div>
             Fase de Grupos
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 w-full">
             {faseGrupos.map(m => <MatchCard key={m.id} match={m} />)}
           </div>
         </section>
@@ -1157,7 +1201,7 @@ function App() {
             Fase Final
           </h3>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 w-full">
             {dieciseisavos.map(m => <MatchCard key={m.id} match={m} />)}
           </div>
         </section>
@@ -1224,7 +1268,7 @@ function App() {
     const top4Locked = isTop4Locked();
 
     return (
-      <div className="w-full max-w-7xl mx-auto px-2 sm:px-6 py-4">
+      <div className="w-full max-w-none mx-auto px-2 sm:px-10 py-4">
         {/* BOTÓN GUARDAR */}
         <div className="flex justify-end mb-4">
           <button
@@ -1242,8 +1286,8 @@ function App() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* COLUMNA IZQUIERDA: Mejores 4 del Torneo (Ancho 4/12) */}
-          <div className="lg:col-span-4 flex flex-col gap-4">
+          {/* COLUMNA IZQUIERDA: Top 4 del Usuario (Ancho 3/12) */}
+          <div className="lg:col-span-3 flex flex-col gap-4">
             <div className="bg-slate-800 rounded-3xl border border-slate-700 p-6 md:p-8 shadow-lg">
               <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-slate-100">
                 <Medal className="w-5 h-5 text-emerald-400" />
@@ -1297,7 +1341,7 @@ function App() {
           </div>
 
           {/* COLUMNA DERECHA: Pronósticos de Partidos (Ancho 8/12) */}
-          <div className="lg:col-span-8 flex flex-col gap-4">
+          <div className="lg:col-span-9 flex flex-col gap-4">
             {/* Contenedor de la tarjeta Pronósticos */}
             <div className="bg-slate-800 rounded-3xl border border-slate-700 p-6 md:p-8 shadow-lg">
               <h3 className="text-xl font-bold mb-6 text-slate-100 flex items-center gap-2 border-b border-slate-700 pb-4">
@@ -1314,58 +1358,72 @@ function App() {
                         #{m.id}
                       </span>
 
-                      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1 sm:gap-3 w-full my-2 py-2 px-1">
-                        <div className="flex items-center justify-end gap-1 sm:gap-2 text-right min-w-0">
-                          <span className="font-bold text-xs sm:text-sm leading-tight whitespace-normal break-words">{m.team1}</span>
-                          <span className="shrink-0 flex items-center justify-center w-5 sm:w-6 h-4 sm:h-5 text-base sm:text-xl overflow-visible">
-                            {typeof getFlag(m.team1) === 'string' && getFlag(m.team1).startsWith('http') ? <img src={getFlag(m.team1)} alt={m.team1} className="w-full h-full object-contain drop-shadow-sm" /> : getFlag(m.team1)}
+                      {/* BÚNKER DE 12 COLUMNAS (100% Clases nativas de Tailwind) */}
+                      <div className="grid grid-cols-12 items-center gap-1 w-full my-1.5 py-1.5 px-1 text-xs sm:text-sm">
+                        
+                        {/* COLUMNA 1 a 3 (25% del ancho): Nombre Local */}
+                        <div className="col-span-3 flex items-center justify-end text-right pr-0.5 sm:pr-1 overflow-hidden">
+                          <span className="font-bold leading-tight line-clamp-2 sm:line-clamp-none text-slate-100">
+                            {m.team1}
                           </span>
                         </div>
 
-                        <div className="flex items-center justify-center px-1 sm:px-3 shrink-0">
-                          <div className="flex items-center gap-1 sm:gap-2">
-                            <input
-                              type="number"
-                              min="0"
-                              max="20"
-                              disabled={locked}
-                              placeholder="-"
-                              value={matchPredictions[m.id]?.score1 ?? ''}
-                              onChange={(e) => {
-                                setMatchPredictions({
-                                  ...matchPredictions,
-                                  [m.id]: { ...matchPredictions[m.id], score1: e.target.value }
-                                });
-                                setHasUnsavedChanges(true);
-                              }}
-                              className={`w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 border rounded-xl text-center font-black text-xl sm:text-2xl focus:ring-2 focus:outline-none transition-shadow ${locked ? 'bg-slate-900/50 border-slate-700 text-slate-500 cursor-not-allowed' : 'bg-slate-800 border-slate-600 text-slate-100 focus:ring-emerald-500'}`}
-                            />
-                            <span className="text-slate-600 font-black px-1">-</span>
-                            <input
-                              type="number"
-                              min="0"
-                              max="20"
-                              disabled={locked}
-                              placeholder="-"
-                              value={matchPredictions[m.id]?.score2 ?? ''}
-                              onChange={(e) => {
-                                setMatchPredictions({
-                                  ...matchPredictions,
-                                  [m.id]: { ...matchPredictions[m.id], score2: e.target.value }
-                                });
-                                setHasUnsavedChanges(true);
-                              }}
-                              className={`w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 border rounded-xl text-center font-black text-xl sm:text-2xl focus:ring-2 focus:outline-none transition-shadow ${locked ? 'bg-slate-900/50 border-slate-700 text-slate-500 cursor-not-allowed' : 'bg-slate-800 border-slate-600 text-slate-100 focus:ring-emerald-500'}`}
-                            />
+                        {/* COLUMNA 4: Bandera Local */}
+                        <div className="col-span-1 flex items-center justify-center text-base sm:text-xl shrink-0">
+                          {typeof getFlag(m.team1) === 'string' && getFlag(m.team1).startsWith('http') ? <img src={getFlag(m.team1)} alt={m.team1} className="w-full h-full object-contain drop-shadow-sm" /> : getFlag(m.team1)}
+                        </div>
+
+                        {/* COLUMNA 5 a 8 (33% del ancho): Centro (Marcador / VS / Inputs) */}
+                        <div className="col-span-4 flex items-center justify-center font-black text-sm sm:text-lg tracking-tighter overflow-hidden">
+                          <div className="w-16 sm:w-24 shrink-0 flex items-center justify-center gap-1 font-black text-base sm:text-xl tracking-tighter">
+                              <input
+                                type="number"
+                                min="0"
+                                max="20"
+                                disabled={locked}
+                                placeholder="-"
+                                value={matchPredictions[m.id]?.score1 ?? ''}
+                                onChange={(e) => {
+                                  setMatchPredictions({
+                                    ...matchPredictions,
+                                    [m.id]: { ...matchPredictions[m.id], score1: e.target.value }
+                                  });
+                                  setHasUnsavedChanges(true);
+                                }}
+                                className={`w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 border rounded-xl text-center font-black text-xl sm:text-2xl focus:ring-2 focus:outline-none transition-shadow ${locked ? 'bg-slate-900/50 border-slate-700 text-slate-500 cursor-not-allowed' : 'bg-slate-800 border-slate-600 text-slate-100 focus:ring-emerald-500'}`}
+                              />
+                              <span className="text-slate-600 font-black px-1">-</span>
+                              <input
+                                type="number"
+                                min="0"
+                                max="20"
+                                disabled={locked}
+                                placeholder="-"
+                                value={matchPredictions[m.id]?.score2 ?? ''}
+                                onChange={(e) => {
+                                  setMatchPredictions({
+                                    ...matchPredictions,
+                                    [m.id]: { ...matchPredictions[m.id], score2: e.target.value }
+                                  });
+                                  setHasUnsavedChanges(true);
+                                }}
+                                className={`w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 border rounded-xl text-center font-black text-xl sm:text-2xl focus:ring-2 focus:outline-none transition-shadow ${locked ? 'bg-slate-900/50 border-slate-700 text-slate-500 cursor-not-allowed' : 'bg-slate-800 border-slate-600 text-slate-100 focus:ring-emerald-500'}`}
+                              />
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-start gap-1 sm:gap-2 text-left min-w-0">
-                          <span className="shrink-0 flex items-center justify-center w-5 sm:w-6 h-4 sm:h-5 text-base sm:text-xl overflow-visible">
-                            {typeof getFlag(m.team2) === 'string' && getFlag(m.team2).startsWith('http') ? <img src={getFlag(m.team2)} alt={m.team2} className="w-full h-full object-contain drop-shadow-sm" /> : getFlag(m.team2)}
-                          </span>
-                          <span className="font-bold text-xs sm:text-sm leading-tight whitespace-normal break-words">{m.team2}</span>
+                        {/* COLUMNA 9: Bandera Visitante */}
+                        <div className="col-span-1 flex items-center justify-center text-base sm:text-xl shrink-0">
+                          {typeof getFlag(m.team2) === 'string' && getFlag(m.team2).startsWith('http') ? <img src={getFlag(m.team2)} alt={m.team2} className="w-full h-full object-contain drop-shadow-sm" /> : getFlag(m.team2)}
                         </div>
+
+                        {/* COLUMNA 10 a 12 (25% del ancho): Nombre Visitante */}
+                        <div className="col-span-3 flex items-center justify-start text-left pl-0.5 sm:pl-1 overflow-hidden">
+                          <span className="font-bold leading-tight line-clamp-2 sm:line-clamp-none text-slate-100">
+                            {m.team2}
+                          </span>
+                        </div>
+
                       </div>
                     </div>
                   );

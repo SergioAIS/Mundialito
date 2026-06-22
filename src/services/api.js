@@ -217,7 +217,7 @@ export const fetchLiveMatches = async () => {
       }
     }
 
-    return {
+    const mappedGame = {
       id: game.id || String(index),
       team1: team1 || 'Equipo 1',
       team2: team2 || 'Equipo 2',
@@ -225,12 +225,21 @@ export const fetchLiveMatches = async () => {
       score2,
       home_scorers: game.home_scorers,
       away_scorers: game.away_scorers,
-      status,
+      status: game.status || 'SCHEDULED',
       date: dateIso,
       stage: game.type === 'group' ? 'Fase de Grupos' : game.type,
       group: game.group,
       matchType: game.type
     };
+
+    // Parche manual para el partido #47 (Colombia vs Rep. Dem. del Congo)
+    if (mappedGame.id === 47 || (mappedGame.team1?.includes('Colombia') && mappedGame.team2?.includes('Congo'))) {
+      // Forzamos las 02:00 UTC del día 24, que en UTC-4 equivalen exactamente a las 22:00
+      mappedGame.utcDate = "2026-06-24T02:00:00.000Z";
+      mappedGame.time = "22:00";
+    }
+
+    return mappedGame;
   });
 };
 
