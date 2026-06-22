@@ -223,6 +223,8 @@ export const fetchLiveMatches = async () => {
       team2: team2 || 'Equipo 2',
       score1,
       score2,
+      home_scorers: game.home_scorers,
+      away_scorers: game.away_scorers,
       status,
       date: dateIso,
       stage: game.type === 'group' ? 'Fase de Grupos' : game.type,

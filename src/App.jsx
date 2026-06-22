@@ -5,6 +5,26 @@ import { communityPredictions } from './data/mundialData';
 import { fetchLiveMatches, calculateStandings, getBoliviaTimeData, TEAM_DICTIONARY } from './services/api';
 import { supabase } from './services/supabase';
 
+const parseScorers = (scorersRaw) => {
+  if (!scorersRaw || scorersRaw === "{}" || scorersRaw === "null") return [];
+  if (Array.isArray(scorersRaw)) return scorersRaw;
+
+  try {
+    // Por si en el futuro la API cambia a JSON real
+    const parsed = JSON.parse(scorersRaw);
+    if (Array.isArray(parsed)) return parsed;
+  } catch (e) {}
+
+  // Limpieza de string PostgreSQL: '{"Gol A", "Gol B"}' -> ["Gol A", "Gol B"]
+  const cleaned = String(scorersRaw).replace(/^\{|\}$/g, '');
+  const matches = [...cleaned.matchAll(/"([^"]+)"/g)];
+  if (matches.length > 0) {
+    return matches.map(m => m[1]);
+  }
+
+  return cleaned.split(',').map(s => s.trim()).filter(Boolean);
+};
+
 const flags = {};
 Object.values(TEAM_DICTIONARY).forEach(info => {
   flags[info.es] = info.flag;
@@ -705,15 +725,22 @@ function App() {
                   <span className="text-xs md:text-sm font-bold text-slate-400 uppercase tracking-wider">
                     {featuredMatch.stage} {featuredMatch.group ? `- ${featuredMatch.group}` : ''}
                   </span>
-                  <span className={`px-4 py-1.5 rounded-full text-xs font-black tracking-widest ${featuredMatch.status === 'EN_CURSO' ? 'bg-red-500/20 text-red-400 animate-pulse' : 'bg-slate-700 text-slate-300'}`}>
-                    {featuredMatch.status === 'EN_CURSO' ? 'EN VIVO' : 'FINALIZADO'}
-                  </span>
+                  <div className="flex items-center gap-2 ml-auto">
+                    <span className="font-mono text-[10px] bg-slate-800/90 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700/50">
+                      #{featuredMatch.id}
+                    </span>
+                    <span className={`px-4 py-1.5 rounded-full text-xs font-black tracking-widest ${featuredMatch.status === 'EN_CURSO' ? 'bg-red-500/20 text-red-400 animate-pulse' : 'bg-slate-700 text-slate-300'}`}>
+                      {featuredMatch.status === 'EN_CURSO' ? 'EN VIVO' : 'FINALIZADO'}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-6 w-full mt-4 mb-2 py-2 px-1 md:px-8">
-                  <div className="flex flex-col sm:flex-row items-center justify-end gap-2 sm:gap-4 text-center sm:text-right overflow-hidden">
-                    <span className="text-5xl md:text-8xl drop-shadow-lg">{getFlag(featuredMatch.team1)}</span>
-                    <span className="font-bold text-lg md:text-2xl truncate w-full">{featuredMatch.team1}</span>
+                  <div className="flex items-center justify-end gap-2 sm:gap-4 text-right min-w-0">
+                    <span className="font-bold text-lg md:text-2xl leading-tight whitespace-normal break-words">{featuredMatch.team1}</span>
+                    <span className="shrink-0 flex items-center justify-center w-12 sm:w-20 h-10 sm:h-16 text-5xl md:text-8xl overflow-visible">
+                      {typeof getFlag(featuredMatch.team1) === 'string' && getFlag(featuredMatch.team1).startsWith('http') ? <img src={getFlag(featuredMatch.team1)} alt={featuredMatch.team1} className="w-full h-full object-contain drop-shadow-sm" /> : getFlag(featuredMatch.team1)}
+                    </span>
                   </div>
 
                   <div className="flex items-center justify-center px-2 sm:px-6 font-black text-5xl md:text-8xl shrink-0 tracking-tighter tabular-nums">
@@ -724,11 +751,34 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row-reverse items-center justify-end gap-2 sm:gap-4 text-center sm:text-left overflow-hidden">
-                    <span className="text-5xl md:text-8xl drop-shadow-lg">{getFlag(featuredMatch.team2)}</span>
-                    <span className="font-bold text-lg md:text-2xl truncate w-full">{featuredMatch.team2}</span>
+                  <div className="flex items-center justify-start gap-2 sm:gap-4 text-left min-w-0">
+                    <span className="shrink-0 flex items-center justify-center w-12 sm:w-20 h-10 sm:h-16 text-5xl md:text-8xl overflow-visible">
+                      {typeof getFlag(featuredMatch.team2) === 'string' && getFlag(featuredMatch.team2).startsWith('http') ? <img src={getFlag(featuredMatch.team2)} alt={featuredMatch.team2} className="w-full h-full object-contain drop-shadow-sm" /> : getFlag(featuredMatch.team2)}
+                    </span>
+                    <span className="font-bold text-lg md:text-2xl leading-tight whitespace-normal break-words">{featuredMatch.team2}</span>
                   </div>
                 </div>
+
+                {(parseScorers(featuredMatch.home_scorers).length > 0 || parseScorers(featuredMatch.away_scorers).length > 0) && (
+                  <div className="grid grid-cols-[1fr_auto_1fr] gap-1 sm:gap-3 px-2 sm:px-4 pb-3 pt-1 text-[11px] sm:text-xs text-slate-300 border-t border-slate-800/80 mt-1">
+                    {/* Goleadores Local (Izquierda) */}
+                    <div className="flex flex-col items-end text-right">
+                      {parseScorers(featuredMatch.home_scorers).map((scorer, i) => (
+                        <span key={i} className="tracking-tight">{scorer} ⚽</span>
+                      ))}
+                    </div>
+
+                    {/* Espaciador central del ancho exacto del marcador */}
+                    <div className="w-12 sm:w-20 shrink-0"></div>
+
+                    {/* Goleadores Visitante (Derecha) */}
+                    <div className="flex flex-col items-start text-left">
+                      {parseScorers(featuredMatch.away_scorers).map((scorer, i) => (
+                        <span key={i} className="tracking-tight">⚽ {scorer}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -738,6 +788,9 @@ function App() {
                 <div className="flex flex-col">
                   <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2 flex items-center gap-2">
                     <Calendar className="w-4 h-4" /> Próximo Partido
+                    <span className="font-mono text-[10px] bg-slate-800/90 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700/50 ml-auto">
+                      #{nextMatch.id}
+                    </span>
                   </span>
                   <div className="flex items-center gap-3 text-lg md:text-xl font-bold">
                     <span className="text-2xl">{getFlag(nextMatch.team1)}</span> {nextMatch.team1}
@@ -918,6 +971,23 @@ function App() {
     );
   };
 
+  const formatBracketTeam = (name) => {
+    if (!name) return '';
+    // Detecta "Winner Group A" o "1st Group A" -> convierte a "1A"
+    const winnerMatch = name.match(/(?:Winner|1st).*?Group\s+([A-L])/i);
+    if (winnerMatch) return `1${winnerMatch[1].toUpperCase()}`;
+
+    // Detecta "Runner-up Group B" o "2nd Group B" -> convierte a "2B"
+    const runnerMatch = name.match(/(?:Runner-up|2nd).*?Group\s+([A-L])/i);
+    if (runnerMatch) return `2${runnerMatch[1].toUpperCase()}`;
+
+    // Detecta terceros lugares (ej. "3rd Group A/B/C")
+    const thirdMatch = name.match(/(?:Third|3rd).*?Group\s+([A-L\/\s]+)/i);
+    if (thirdMatch) return `3 ${thirdMatch[1].trim().toUpperCase()}`;
+
+    return name;
+  };
+
   const renderHorario = () => {
     const sortedMatches = [...matches].sort((a, b) => new Date(a.date) - new Date(b.date));
     const now = new Date();
@@ -938,15 +1008,24 @@ function App() {
       return (
         <div className="bg-slate-800 border border-slate-700 p-4 md:p-5 rounded-xl flex flex-col md:flex-row md:items-center justify-between hover:border-slate-500 transition-colors shadow-sm gap-4">
           <div className="flex flex-row md:flex-col justify-between md:justify-center w-full md:w-1/4">
-            <span className="text-xs font-semibold text-slate-400 capitalize">{btz.date}</span>
+            <div className="flex justify-between items-center w-full">
+              <span className="text-xs font-semibold text-slate-400 capitalize">{btz.date}</span>
+              <span className="font-mono text-[10px] bg-slate-800/90 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700/50 ml-auto md:ml-2">
+                #{match.id}
+              </span>
+            </div>
             <span className="text-sm md:text-base font-bold text-emerald-400 font-mono">{btz.time}</span>
           </div>
 
           <div className="flex-1 w-full mt-3 md:mt-0">
             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1 sm:gap-3 w-full my-2 py-2 px-1">
-              <div className="flex flex-col sm:flex-row items-center justify-end gap-1 sm:gap-2 text-center sm:text-right overflow-hidden">
-                <span className="text-2xl md:text-3xl drop-shadow-sm">{getFlag(match.team1)}</span>
-                <span className="font-bold text-xs sm:text-base truncate w-full">{match.team1}</span>
+              <div className="flex items-center justify-end gap-1 sm:gap-2 text-right min-w-0">
+                <span className="font-bold text-xs sm:text-sm leading-tight whitespace-normal break-words sm:overflow-visible">
+                  {formatBracketTeam(match.team1)}
+                </span>
+                <span className="shrink-0 flex items-center justify-center w-5 sm:w-6 h-4 sm:h-5 text-base sm:text-xl overflow-visible">
+                  {typeof getFlag(match.team1) === 'string' && getFlag(match.team1).startsWith('http') ? <img src={getFlag(match.team1)} alt={match.team1} className="w-full h-full object-contain drop-shadow-sm" /> : getFlag(match.team1)}
+                </span>
               </div>
 
               <div className="flex items-center justify-center px-1 sm:px-3 font-black text-lg sm:text-2xl shrink-0 tracking-tighter">
@@ -955,9 +1034,13 @@ function App() {
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row-reverse items-center justify-end gap-1 sm:gap-2 text-center sm:text-left overflow-hidden">
-                <span className="text-2xl md:text-3xl drop-shadow-sm">{getFlag(match.team2)}</span>
-                <span className="font-bold text-xs sm:text-base truncate w-full">{match.team2}</span>
+              <div className="flex items-center justify-start gap-1 sm:gap-2 text-left min-w-0">
+                <span className="shrink-0 flex items-center justify-center w-5 sm:w-6 h-4 sm:h-5 text-base sm:text-xl overflow-visible">
+                  {typeof getFlag(match.team2) === 'string' && getFlag(match.team2).startsWith('http') ? <img src={getFlag(match.team2)} alt={match.team2} className="w-full h-full object-contain drop-shadow-sm" /> : getFlag(match.team2)}
+                </span>
+                <span className="font-bold text-xs sm:text-sm leading-tight whitespace-normal break-words sm:overflow-visible">
+                  {formatBracketTeam(match.team2)}
+                </span>
               </div>
             </div>
           </div>
@@ -1003,8 +1086,13 @@ function App() {
                   return (
                     <div key={m.id} className="bg-slate-800 border border-slate-600 p-4 rounded-xl flex flex-col gap-3 shadow-md">
                       <div className="flex justify-between items-center text-sm border-b border-slate-700 pb-2">
-                        <span className="font-semibold text-slate-400">{btz.date}</span>
-                        <span className="font-bold text-slate-500">{m.stage}</span>
+                        <div className="flex gap-2 items-center">
+                          <span className="font-semibold text-slate-400">{btz.date}</span>
+                          <span className="font-bold text-slate-500">{m.stage}</span>
+                        </div>
+                        <span className="font-mono text-[10px] bg-slate-800/90 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700/50 ml-auto">
+                          #{m.id}
+                        </span>
                       </div>
 
                       <div className="flex items-center justify-between gap-4 py-2">
@@ -1136,14 +1224,9 @@ function App() {
     const top4Locked = isTop4Locked();
 
     return (
-      <div className="p-4 md:p-6 lg:p-8 w-full max-w-7xl mx-auto px-2 sm:px-6 flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
-
-        {/* Floating Action Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sticky top-[4.5rem] z-10 bg-slate-900/95 backdrop-blur-md p-4 rounded-2xl border border-slate-700 shadow-[0_8px_30px_rgb(0,0,0,0.12)]">
-          <h2 className="text-2xl font-black uppercase tracking-wide text-slate-100 flex items-center gap-2">
-            <Edit3 className="w-6 h-6 text-emerald-400" />
-            Mis Predicciones
-          </h2>
+      <div className="w-full max-w-7xl mx-auto px-2 sm:px-6 py-4">
+        {/* BOTÓN GUARDAR */}
+        <div className="flex justify-end mb-4">
           <button
             id="btn-save"
             onClick={handleSavePredictions}
@@ -1158,126 +1241,139 @@ function App() {
           </button>
         </div>
 
-        {/* Top 4 */}
-        <div className="bg-slate-800 rounded-3xl border border-slate-700 p-6 md:p-8 shadow-lg">
-          <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-slate-100">
-            <Medal className="w-5 h-5 text-emerald-400" />
-            Mejores 4 del Torneo
-            {top4Locked && <Lock className="w-4 h-4 text-red-400 ml-2" />}
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {[
-              { id: 'first', label: '1. Campeón', color: 'text-yellow-400', border: 'border-yellow-400/30 bg-yellow-400/5' },
-              { id: 'second', label: '2. Subcampeón', color: 'text-slate-300', border: 'border-slate-400/30 bg-slate-400/5' },
-              { id: 'third', label: '3. Tercer Lugar', color: 'text-amber-600', border: 'border-amber-600/30 bg-amber-600/5' },
-              { id: 'fourth', label: '4. Cuarto Lugar', color: 'text-slate-400', border: 'border-slate-500/30 bg-slate-500/5' },
-            ].map((pos) => (
-              <div key={pos.id} className={`p-4 md:p-5 rounded-xl border transition-colors ${pos.border} ${top4Locked ? 'opacity-80' : ''}`}>
-                <label className={`block text-sm md:text-base font-bold mb-3 ${pos.color} flex justify-between`}>
-                  {pos.label}
-                  {top4Locked && <span className="text-xs text-red-400 bg-red-900/30 px-2 py-0.5 rounded border border-red-500/20">Bloqueado</span>}
-                </label>
-                <div className="relative">
-                  <select
-                    value={predictions[pos.id] || ''}
-                    disabled={top4Locked}
-                    onChange={(e) => {
-                      setPredictions({ ...predictions, [pos.id]: e.target.value });
-                      setHasUnsavedChanges(true);
-                    }}
-                    className={`w-full bg-slate-900 border border-slate-700 rounded-lg pl-4 pr-10 py-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none font-medium ${top4Locked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-slate-500 transition-colors'}`}
-                  >
-                    <option value="">-- Selecciona un equipo --</option>
-                    {TEAMS.map(team => {
-                      const isSelectedElsewhere = Object.values(predictions).includes(team) && predictions[pos.id] !== team;
-                      return (
-                        <option key={team} value={team} disabled={isSelectedElsewhere}>
-                          {team} {isSelectedElsewhere ? '(Ya seleccionado)' : ''}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-slate-400">
-                    {!top4Locked && (
-                      <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
-                        <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                      </svg>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Proximos Partidos */}
-        <div className="bg-slate-800 rounded-3xl border border-slate-700 p-6 md:p-8 shadow-lg">
-          <h3 className="text-xl font-bold mb-6 text-slate-100 flex items-center gap-2 border-b border-slate-700 pb-4">
-            <Calendar className="w-5 h-5 text-emerald-400" />
-            Pronósticos de Próximos Partidos
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
-            {pendientes.map(m => {
-              const locked = isMatchLocked(m);
-              return (
-                <div key={m.id} className={`bg-slate-900/40 p-2 sm:p-4 rounded-xl border relative transition-colors ${locked ? 'border-slate-800 opacity-80' : 'border-slate-700/50 hover:border-slate-600'}`}>
-                  {locked && <Lock className="w-4 h-4 text-red-400 absolute top-2 left-2 opacity-70" title="Partido Bloqueado" />}
-
-                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1 sm:gap-3 w-full my-2 py-2 px-1">
-                    <div className="flex flex-col sm:flex-row items-center justify-end gap-1 sm:gap-2 text-center sm:text-right overflow-hidden">
-                      <span className="text-3xl sm:text-4xl drop-shadow-sm">{getFlag(m.team1)}</span>
-                      <span className="font-bold text-xs sm:text-base truncate w-full">{m.team1}</span>
-                    </div>
-
-                    <div className="flex items-center justify-center px-1 sm:px-3 shrink-0">
-                      <div className="flex items-center gap-1 sm:gap-2">
-                        <input
-                          type="number"
-                          min="0"
-                          max="20"
-                          disabled={locked}
-                          placeholder="-"
-                          value={matchPredictions[m.id]?.score1 ?? ''}
-                          onChange={(e) => {
-                            setMatchPredictions({
-                              ...matchPredictions,
-                              [m.id]: { ...matchPredictions[m.id], score1: e.target.value }
-                            });
-                            setHasUnsavedChanges(true);
-                          }}
-                          className={`w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 border rounded-xl text-center font-black text-xl sm:text-2xl focus:ring-2 focus:outline-none transition-shadow ${locked ? 'bg-slate-900/50 border-slate-700 text-slate-500 cursor-not-allowed' : 'bg-slate-800 border-slate-600 text-slate-100 focus:ring-emerald-500'}`}
-                        />
-                        <span className="text-slate-600 font-black px-1">-</span>
-                        <input
-                          type="number"
-                          min="0"
-                          max="20"
-                          disabled={locked}
-                          placeholder="-"
-                          value={matchPredictions[m.id]?.score2 ?? ''}
-                          onChange={(e) => {
-                            setMatchPredictions({
-                              ...matchPredictions,
-                              [m.id]: { ...matchPredictions[m.id], score2: e.target.value }
-                            });
-                            setHasUnsavedChanges(true);
-                          }}
-                          className={`w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 border rounded-xl text-center font-black text-xl sm:text-2xl focus:ring-2 focus:outline-none transition-shadow ${locked ? 'bg-slate-900/50 border-slate-700 text-slate-500 cursor-not-allowed' : 'bg-slate-800 border-slate-600 text-slate-100 focus:ring-emerald-500'}`}
-                        />
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* COLUMNA IZQUIERDA: Mejores 4 del Torneo (Ancho 4/12) */}
+          <div className="lg:col-span-4 flex flex-col gap-4">
+            <div className="bg-slate-800 rounded-3xl border border-slate-700 p-6 md:p-8 shadow-lg">
+              <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-slate-100">
+                <Medal className="w-5 h-5 text-emerald-400" />
+                Mejores 4 del Torneo
+                {top4Locked && <Lock className="w-4 h-4 text-red-400 ml-2" />}
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-6">
+                {[
+                  { id: 'first', label: '1. Campeón', color: 'text-yellow-400', border: 'border-yellow-400/30 bg-yellow-400/5' },
+                  { id: 'second', label: '2. Subcampeón', color: 'text-slate-300', border: 'border-slate-400/30 bg-slate-400/5' },
+                  { id: 'third', label: '3. Tercer Lugar', color: 'text-amber-600', border: 'border-amber-600/30 bg-amber-600/5' },
+                  { id: 'fourth', label: '4. Cuarto Lugar', color: 'text-slate-400', border: 'border-slate-500/30 bg-slate-500/5' },
+                ].map((pos) => (
+                  <div key={pos.id} className={`p-4 md:p-5 rounded-xl border transition-colors ${pos.border} ${top4Locked ? 'opacity-80' : ''}`}>
+                    <label className={`block text-sm md:text-base font-bold mb-3 ${pos.color} flex justify-between`}>
+                      {pos.label}
+                      {top4Locked && <span className="text-xs text-red-400 bg-red-900/30 px-2 py-0.5 rounded border border-red-500/20">Bloqueado</span>}
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={predictions[pos.id] || ''}
+                        disabled={top4Locked}
+                        onChange={(e) => {
+                          setPredictions({ ...predictions, [pos.id]: e.target.value });
+                          setHasUnsavedChanges(true);
+                        }}
+                        className={`w-full bg-slate-900 border border-slate-700 rounded-lg pl-4 pr-10 py-3 text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none font-medium ${top4Locked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-slate-500 transition-colors'}`}
+                      >
+                        <option value="">-- Selecciona un equipo --</option>
+                        {TEAMS.map(team => {
+                          const isSelectedElsewhere = Object.values(predictions).includes(team) && predictions[pos.id] !== team;
+                          return (
+                            <option key={team} value={team} disabled={isSelectedElsewhere}>
+                              {team} {isSelectedElsewhere ? '(Ya seleccionado)' : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                      <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-slate-400">
+                        {!top4Locked && (
+                          <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
+                            <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                          </svg>
+                        )}
                       </div>
                     </div>
-
-                    <div className="flex flex-col sm:flex-row-reverse items-center justify-end gap-1 sm:gap-2 text-center sm:text-left overflow-hidden">
-                      <span className="text-3xl sm:text-4xl drop-shadow-sm">{getFlag(m.team2)}</span>
-                      <span className="font-bold text-xs sm:text-base truncate w-full">{m.team2}</span>
-                    </div>
                   </div>
-                </div>
-              );
-            })}
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* COLUMNA DERECHA: Pronósticos de Partidos (Ancho 8/12) */}
+          <div className="lg:col-span-8 flex flex-col gap-4">
+            {/* Contenedor de la tarjeta Pronósticos */}
+            <div className="bg-slate-800 rounded-3xl border border-slate-700 p-6 md:p-8 shadow-lg">
+              <h3 className="text-xl font-bold mb-6 text-slate-100 flex items-center gap-2 border-b border-slate-700 pb-4">
+                <Calendar className="w-5 h-5 text-emerald-400" />
+                Pronósticos de Próximos Partidos
+              </h3>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 sm:gap-4">
+                {pendientes.map(m => {
+                  const locked = isMatchLocked(m);
+                  return (
+                    <div key={m.id} className={`bg-slate-900/40 p-2 sm:p-4 rounded-xl border relative transition-colors ${locked ? 'border-slate-800 opacity-80' : 'border-slate-700/50 hover:border-slate-600'}`}>
+                      {locked && <Lock className="w-4 h-4 text-red-400 absolute top-2 left-2 opacity-70" title="Partido Bloqueado" />}
+                      <span className="font-mono text-[10px] bg-slate-800/90 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700/50 absolute top-2 right-2">
+                        #{m.id}
+                      </span>
+
+                      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1 sm:gap-3 w-full my-2 py-2 px-1">
+                        <div className="flex items-center justify-end gap-1 sm:gap-2 text-right min-w-0">
+                          <span className="font-bold text-xs sm:text-sm leading-tight whitespace-normal break-words">{m.team1}</span>
+                          <span className="shrink-0 flex items-center justify-center w-5 sm:w-6 h-4 sm:h-5 text-base sm:text-xl overflow-visible">
+                            {typeof getFlag(m.team1) === 'string' && getFlag(m.team1).startsWith('http') ? <img src={getFlag(m.team1)} alt={m.team1} className="w-full h-full object-contain drop-shadow-sm" /> : getFlag(m.team1)}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-center px-1 sm:px-3 shrink-0">
+                          <div className="flex items-center gap-1 sm:gap-2">
+                            <input
+                              type="number"
+                              min="0"
+                              max="20"
+                              disabled={locked}
+                              placeholder="-"
+                              value={matchPredictions[m.id]?.score1 ?? ''}
+                              onChange={(e) => {
+                                setMatchPredictions({
+                                  ...matchPredictions,
+                                  [m.id]: { ...matchPredictions[m.id], score1: e.target.value }
+                                });
+                                setHasUnsavedChanges(true);
+                              }}
+                              className={`w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 border rounded-xl text-center font-black text-xl sm:text-2xl focus:ring-2 focus:outline-none transition-shadow ${locked ? 'bg-slate-900/50 border-slate-700 text-slate-500 cursor-not-allowed' : 'bg-slate-800 border-slate-600 text-slate-100 focus:ring-emerald-500'}`}
+                            />
+                            <span className="text-slate-600 font-black px-1">-</span>
+                            <input
+                              type="number"
+                              min="0"
+                              max="20"
+                              disabled={locked}
+                              placeholder="-"
+                              value={matchPredictions[m.id]?.score2 ?? ''}
+                              onChange={(e) => {
+                                setMatchPredictions({
+                                  ...matchPredictions,
+                                  [m.id]: { ...matchPredictions[m.id], score2: e.target.value }
+                                });
+                                setHasUnsavedChanges(true);
+                              }}
+                              className={`w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 border rounded-xl text-center font-black text-xl sm:text-2xl focus:ring-2 focus:outline-none transition-shadow ${locked ? 'bg-slate-900/50 border-slate-700 text-slate-500 cursor-not-allowed' : 'bg-slate-800 border-slate-600 text-slate-100 focus:ring-emerald-500'}`}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-start gap-1 sm:gap-2 text-left min-w-0">
+                          <span className="shrink-0 flex items-center justify-center w-5 sm:w-6 h-4 sm:h-5 text-base sm:text-xl overflow-visible">
+                            {typeof getFlag(m.team2) === 'string' && getFlag(m.team2).startsWith('http') ? <img src={getFlag(m.team2)} alt={m.team2} className="w-full h-full object-contain drop-shadow-sm" /> : getFlag(m.team2)}
+                          </span>
+                          <span className="font-bold text-xs sm:text-sm leading-tight whitespace-normal break-words">{m.team2}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
-
       </div>
     );
   };
