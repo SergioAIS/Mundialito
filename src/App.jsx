@@ -739,9 +739,11 @@ function App() {
   );
 
   const renderInicio = () => {
-    const enCurso = matches.find(m => m.status === 'EN_CURSO');
-    const finalizados = matches.filter(m => m.status === 'FINALIZADO').sort((a, b) => new Date(b.date) - new Date(a.date));
-    const featuredMatch = enCurso || finalizados[0];
+    const liveMatches = matches.filter(m => m.status === 'LIVE' || m.status === 'IN_PLAY' || m.status === 'PAUSED' || m.status === 'EN_CURSO');
+    const sortedLiveMatches = [...liveMatches].sort((a, b) => Number(b.id) - Number(a.id));
+    const finalizados = matches.filter(m => m.status === 'FINALIZADO' || m.status === 'FINISHED').sort((a, b) => new Date(b.date) - new Date(a.date));
+    const featuredMatch = sortedLiveMatches.length > 0 ? sortedLiveMatches[0] : finalizados[0];
+    const isFeaturedLive = featuredMatch && (featuredMatch.status === 'LIVE' || featuredMatch.status === 'IN_PLAY' || featuredMatch.status === 'PAUSED' || featuredMatch.status === 'EN_CURSO');
 
     const now = new Date();
     const pendientes = matches
@@ -771,8 +773,8 @@ function App() {
                     <span className="font-mono text-[10px] bg-slate-800/90 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700/50">
                       #{featuredMatch.id}
                     </span>
-                    <span className={`px-4 py-1.5 rounded-full text-xs font-black tracking-widest ${featuredMatch.status === 'EN_CURSO' ? 'bg-red-500/20 text-red-400 animate-pulse' : 'bg-slate-700 text-slate-300'}`}>
-                      {featuredMatch.status === 'EN_CURSO' ? 'EN VIVO' : 'FINALIZADO'}
+                    <span className={`px-4 py-1.5 rounded-full text-xs font-black tracking-widest ${isFeaturedLive ? 'bg-red-500/20 text-red-400 animate-pulse' : 'bg-slate-700 text-slate-300'}`}>
+                      {isFeaturedLive ? 'EN VIVO' : 'FINALIZADO'}
                     </span>
                   </div>
                 </div>
@@ -819,6 +821,35 @@ function App() {
                         <span key={i} className="tracking-tight">⚽ {scorer}</span>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {sortedLiveMatches.length > 1 && (
+                  <div className="mt-4 pt-3 border-t border-slate-700/50 flex flex-col gap-2">
+                    <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">Otros partidos en vivo / Retrasados</span>
+                    {sortedLiveMatches.slice(1).map((extraMatch) => (
+                      <div key={extraMatch.id} className="bg-slate-900/40 border border-slate-800/60 rounded-lg p-2.5 flex flex-col gap-1.5">
+                        {/* Cabecera compacta */}
+                        <div className="flex items-center justify-between text-[11px] text-slate-400 border-b border-slate-800/40 pb-1">
+                          <span className="font-medium">{extraMatch.stage}</span>
+                          <span className="text-rose-400 font-bold animate-pulse bg-rose-500/10 px-1 rounded text-[9px]">● EN SEGUNDO PLANO</span>
+                        </div>
+                        {/* Fila del partido clonando el diseño limpio 1fr_auto_1fr de MatchCard */}
+                        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 w-full text-xs">
+                          <div className="flex items-center justify-end gap-1.5 text-right overflow-hidden">
+                            <span className="font-bold text-slate-200 truncate">{formatBracketTeam(extraMatch.team1)}</span>
+                            <span className="shrink-0 flex items-center justify-center text-lg">{typeof getFlag(extraMatch.team1) === 'string' && getFlag(extraMatch.team1).startsWith('http') ? <img src={getFlag(extraMatch.team1)} alt={extraMatch.team1} className="w-4 h-4 object-contain drop-shadow-sm" /> : getFlag(extraMatch.team1)}</span>
+                          </div>
+                          <div className="px-2 py-0.5 bg-slate-900 border border-slate-800 rounded font-black text-xs text-slate-300 min-w-[40px] text-center">
+                            {extraMatch.score1 ?? 0} : {extraMatch.score2 ?? 0}
+                          </div>
+                          <div className="flex items-center justify-start gap-1.5 text-left overflow-hidden">
+                            <span className="shrink-0 flex items-center justify-center text-lg">{typeof getFlag(extraMatch.team2) === 'string' && getFlag(extraMatch.team2).startsWith('http') ? <img src={getFlag(extraMatch.team2)} alt={extraMatch.team2} className="w-4 h-4 object-contain drop-shadow-sm" /> : getFlag(extraMatch.team2)}</span>
+                            <span className="font-bold text-slate-200 truncate">{formatBracketTeam(extraMatch.team2)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
