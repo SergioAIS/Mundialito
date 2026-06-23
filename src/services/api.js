@@ -77,20 +77,30 @@ export const fetchLiveMatches = async () => {
   try {
     const { data, error } = await supabase
       .from('cache_partidos_mundial')
-      .select('raw_json')
+      .select('raw_json, actualizado_en')
       .eq('id', 'singleton_fixture')
       .single();
 
     if (error) throw error;
+
     if (data?.raw_json?.games) {
       gamesArray = data.raw_json.games;
       localStorage.setItem('api_matches_cache', JSON.stringify(gamesArray));
+
+      // EL DESFIBRILADOR (Idea de Sergio): Si la base de datos lleva >90 segundos abandonada,
+      // este cliente asume el rol de sacrificio y le da una patada al servidor de Vercel de forma silenciosa
+      const secondsStale = (new Date() - new Date(data.actualizado_en)) / 1000;
+      if (secondsStale > 90) {
+        console.warn(`⚠️ Caché vieja por ${Math.round(secondsStale)}s. Disparando auto-desfibrilador...`);
+        fetch('/api/sync?secret=sergio2026').catch(() => {});
+      }
     }
-  } catch (error) {
+  } catch (err) {
     const cached = localStorage.getItem('api_matches_cache');
-    if (cached) try { gamesArray = JSON.parse(cached); } catch (e) {}
-    if (gamesArray.length === 0) return mockMatches;
+    if (cached) try { gamesArray = JSON.parse(cached); } catch(e){}
   }
+
+  if (!gamesArray || gamesArray.length === 0) gamesArray = mockMatches;
 
   return gamesArray.map((game, index) => {
     let label1 = game.home_team_label?.replace('Winner Match', 'Ganador Partido').replace('Loser Match', 'Perdedor Partido');
