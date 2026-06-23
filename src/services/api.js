@@ -100,17 +100,16 @@ export const fetchLiveMatches = async () => {
     const flag1 = TEAM_DICTIONARY[team1En]?.flag || '🏳️';
     const flag2 = TEAM_DICTIONARY[team2En]?.flag || '🏳️';
 
-    // EL PUENTE BILINGÜE ABSOLUTO (Vuelve al Español que App.jsx entiende)
     let status = 'PENDIENTE'; 
     const isFinished = String(game.finished).toUpperCase() === 'TRUE' || game.finished === true;
     const elapsed = String(game.time_elapsed || '').toLowerCase();
 
     if (isFinished) {
       status = 'FINALIZADO';
-    } else if (['live', 'in_play', 'paused', 'ht', 'et', 'p'].includes(elapsed)) {
-      status = 'LIVE'; // Mantenemos LIVE para el mosaico principal
+    } else if (['live', 'in_play', 'paused', 'ht', 'et', 'p', 'en_curso'].includes(elapsed)) {
+      status = 'EN_CURSO'; 
     } else if (elapsed === 'postponed') {
-      status = 'PENDIENTE'; // Si se pospone, vuelve a cola de predicción
+      status = 'PENDIENTE'; 
     }
 
     const matchKey1 = `${game.home_team_name_en}-${game.away_team_name_en}`;
@@ -136,9 +135,9 @@ export const fetchLiveMatches = async () => {
       score2,
       home_scorers: game.home_scorers,
       away_scorers: game.away_scorers,
-      status, // <--- VUELVE A DECIR 'PENDIENTE' O 'FINALIZADO'
-      date: dateIso, // <--- INTOCABLE: El timestamp ISO para que React ordene matemáticamente
-      displayDate: boData.date, // <--- El texto bonito en español ("lunes...") para la pantalla
+      status, 
+      date: dateIso, 
+      displayDate: boData.date, 
       time: boData.time,
       stage: game.type === 'group' ? 'Fase de Grupos' : game.type,
       group: game.group,
@@ -170,6 +169,10 @@ export const calculateStandings = (matches) => {
 
     initTeam(match.team1);
     initTeam(match.team2);
+
+    // <--- VARIABLES RESUCITADAS:
+    const t1 = groupsMap[formattedGroup][match.team1];
+    const t2 = groupsMap[formattedGroup][match.team2];
 
     if (match.status !== 'FINALIZADO' && match.status !== 'FINISHED') return;
     if (!t1 || !t2) return;
