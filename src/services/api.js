@@ -1,3 +1,4 @@
+import { supabase } from './supabase';
 import { matches as mockMatches, groupsData as mockGroups } from '../data/mundialData';
 
 export const TEAM_DICTIONARY = {
@@ -74,11 +75,17 @@ export const getBoliviaTimeData = (isoString) => {
 export const fetchLiveMatches = async () => {
   let gamesArray = [];
   try {
-    const response = await fetch('https://worldcup26.ir/get/games');
-    if (!response.ok) throw new Error(`HTTP: ${response.status}`);
-    const data = await response.json();
-    gamesArray = (data && Array.isArray(data.games)) ? data.games : [];
-    if (gamesArray.length > 0) localStorage.setItem('api_matches_cache', JSON.stringify(gamesArray));
+    const { data, error } = await supabase
+      .from('cache_partidos_mundial')
+      .select('raw_json')
+      .eq('id', 'singleton_fixture')
+      .single();
+
+    if (error) throw error;
+    if (data?.raw_json?.games) {
+      gamesArray = data.raw_json.games;
+      localStorage.setItem('api_matches_cache', JSON.stringify(gamesArray));
+    }
   } catch (error) {
     const cached = localStorage.getItem('api_matches_cache');
     if (cached) try { gamesArray = JSON.parse(cached); } catch (e) {}

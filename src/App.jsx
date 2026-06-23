@@ -383,19 +383,19 @@ function App() {
 
   // Fetch y Suscripción en Tiempo Real de predicciones de la comunidad
   useEffect(() => {
-    const enCursoGlobal = matches.find(m => m.status === 'EN_CURSO');
-    const finalizadosGlobal = matches.filter(m => m.status === 'FINALIZADO').sort((a, b) => new Date(b.date) - new Date(a.date));
-    const featuredMatchGlobal = enCursoGlobal || finalizadosGlobal[0];
+    const mainLive = getCommandCenterKing(matches);
+    const secondaryLiveList = getSecondaryLiveMatches(matches, mainLive?.id);
+    const activeMatches = [mainLive, ...secondaryLiveList].filter(Boolean);
+    const matchIds = activeMatches.map(m => String(m.id));
 
-    if (!featuredMatchGlobal?.id) return;
-    const matchId = featuredMatchGlobal.id;
+    if (matchIds.length === 0) return;
 
     const fetchVotes = async () => {
       try {
         const { data, error } = await supabase
           .from('predicciones_comunidad')
           .select('*')
-          .eq('partido_id', matchId);
+          .in('partido_id', matchIds);
 
         if (error) throw error;
         setCommunityVotes(data || []);
@@ -407,20 +407,21 @@ function App() {
     // Carga inicial
     fetchVotes();
 
-    // Suscripción a cambios en tiempo real para este partido
+    // Suscripción global a cambios en tiempo real en la tabla
     const channel = supabase
-      .channel(`realtime:predicciones_${matchId}`)
+      .channel(`realtime:predicciones_activas`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
-          table: 'predicciones_comunidad',
-          filter: `partido_id=eq.${matchId}`
+          table: 'predicciones_comunidad'
         },
         (payload) => {
-          // Refrescamos los votos inmediatamente tras detectar un cambio en la base de datos
-          fetchVotes();
+          // Refrescamos los votos si afectan a nuestros partidos activos
+          if (matchIds.includes(String(payload.new?.partido_id || payload.old?.partido_id))) {
+            fetchVotes();
+          }
         }
       )
       .subscribe();
@@ -949,50 +950,64 @@ function App() {
               )}
             </div>
 
-            {/* 2. Predicciones de la Comunidad */}
-            <div className="bg-slate-800 border border-slate-700 rounded-3xl p-6 shadow-md">
-              <h3 className="text-lg font-bold mb-6 flex items-center gap-2 border-b border-slate-700 pb-4 text-slate-100">
-                <Users className="w-5 h-5 text-emerald-400" />
-                Predicciones de la Comunidad
-                <span className="ml-auto text-xs font-normal text-slate-400 bg-slate-900 px-3 py-1 rounded-full hidden sm:block">
-                  Para el partido {featuredMatch?.status === 'EN_CURSO' ? 'en vivo' : 'reciente'}
-                </span>
-              </h3>
-              <div className="flex flex-col gap-3">
-                {communityVotes.length > 0 ? (
-                  communityVotes.map((pred, idx) => (
-                    <div key={idx} className="bg-slate-900/50 border border-slate-700/50 p-3 rounded-xl flex justify-between items-center hover:bg-slate-700/30 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-emerald-900/40 flex items-center justify-center border border-emerald-500/30 text-emerald-400 font-bold text-sm">
-                          {pred.usuario.charAt(0).toUpperCase()}
-                        </div>
-                        <span className="font-semibold text-sm text-slate-200">{pred.usuario}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {pred.prediccion && pred.prediccion.includes(' - ') ? (
-                          <>
-                            <div className="w-8 h-8 flex items-center justify-center font-mono font-black text-sm bg-slate-900 rounded-lg border border-slate-700 text-emerald-400 shadow-inner">
-                              {pred.prediccion.split(' - ')[0].trim()}
-                            </div>
-                            <span className="text-slate-500 font-bold">-</span>
-                            <div className="w-8 h-8 flex items-center justify-center font-mono font-black text-sm bg-slate-900 rounded-lg border border-slate-700 text-emerald-400 shadow-inner">
-                              {pred.prediccion.split(' - ')[1].trim()}
-                            </div>
-                          </>
-                        ) : (
-                          <div className="font-mono font-bold text-sm bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-700 text-emerald-400 shadow-inner">
-                            {pred.prediccion}
-                          </div>
-                        )}
-                      </div>
+            {/* 2. Predicciones de la Comunidad (Espejo Simultáneo) */}
+            <div className="flex flex-col gap-4">
+              {[mainLive, ...secondaryLiveList].filter(Boolean).map((activeMatch) => {
+                const matchVotes = communityVotes.filter(v => String(v.partido_id) === String(activeMatch.id));
+                const isMatchLive = isActuallyLive(activeMatch);
+                
+                return (
+                  <div key={activeMatch.id} className="bg-slate-800 border border-slate-700 rounded-3xl p-6 shadow-md">
+                    <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b border-slate-700 pb-3 text-slate-100">
+                      <Users className="w-5 h-5 text-emerald-400" />
+                      Predicciones de la Comunidad
+                      <span className="ml-auto text-xs font-normal text-slate-400 bg-slate-900 px-3 py-1 rounded-full hidden sm:block">
+                        {isMatchLive ? 'En vivo' : 'Reciente'}
+                      </span>
+                    </h3>
+                    <div className="flex items-center gap-2 text-sm font-bold text-slate-300 mb-4 bg-slate-900/50 p-2 rounded-lg justify-center border border-slate-700/50">
+                      <span>{getFlag(activeMatch.team1)}</span> {activeMatch.team1}
+                      <span className="text-slate-500 mx-2">vs</span>
+                      {activeMatch.team2} <span>{getFlag(activeMatch.team2)}</span>
                     </div>
-                  ))
-                ) : (
-                  <div className="text-center py-6 text-sm text-slate-400">
-                    Aún no hay predicciones para este partido. ¡Sé el primero en predecir!
+                    <div className="flex flex-col gap-3">
+                      {matchVotes.length > 0 ? (
+                        matchVotes.map((pred, idx) => (
+                          <div key={idx} className="bg-slate-900/50 border border-slate-700/50 p-3 rounded-xl flex justify-between items-center hover:bg-slate-700/30 transition-colors">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-emerald-900/40 flex items-center justify-center border border-emerald-500/30 text-emerald-400 font-bold text-sm">
+                                {pred.usuario.charAt(0).toUpperCase()}
+                              </div>
+                              <span className="font-semibold text-sm text-slate-200">{pred.usuario}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {pred.prediccion && pred.prediccion.includes(' - ') ? (
+                                <>
+                                  <div className="w-8 h-8 flex items-center justify-center font-mono font-black text-sm bg-slate-900 rounded-lg border border-slate-700 text-emerald-400 shadow-inner">
+                                    {pred.prediccion.split(' - ')[0].trim()}
+                                  </div>
+                                  <span className="text-slate-500 font-bold">-</span>
+                                  <div className="w-8 h-8 flex items-center justify-center font-mono font-black text-sm bg-slate-900 rounded-lg border border-slate-700 text-emerald-400 shadow-inner">
+                                    {pred.prediccion.split(' - ')[1].trim()}
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="font-mono font-bold text-sm bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-700 text-emerald-400 shadow-inner">
+                                  {pred.prediccion}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-4 text-sm text-slate-400">
+                          Aún no hay predicciones para este partido. ¡Sé el primero en predecir!
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
+                );
+              })}
             </div>
 
             {/* 3. Top 4 de la Comunidad */}
