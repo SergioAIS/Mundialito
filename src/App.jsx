@@ -12,6 +12,43 @@ const getTrueMatchTime = (match, btzTime) => {
   return btzTime || match.time || match.displayTime || "20:00";
 };
 
+// 1. Validador universal de partido activo
+const isActuallyLive = (m) => {
+  if (!m) return false;
+  const str = String(m.time_elapsed || m.status || '').toLowerCase();
+  return ['live', 'in_play', 'paused', '1h', '2h', 'ht', 'et', 'p', 'en_curso'].includes(str);
+};
+
+// 2. El Rey del Centro de Comando (Línea de sucesión anti-pantalla blanca)
+const getCommandCenterKing = (matchesList) => {
+  if (!matchesList || !Array.isArray(matchesList) || matchesList.length === 0) return null;
+  
+  // 1. PRIORIDAD ABSOLUTA: El Rey (Partidos jugándose AHORA)
+  const live = matchesList.filter(isActuallyLive);
+  if (live.length > 0) {
+    return [...live].sort((a, b) => Number(b.id) - Number(a.id))[0];
+  }
+  
+  // 2. EL CAMBIO UX: El Regente (El ÚLTIMO partido de la historia que terminó)
+  const finished = matchesList.filter(m => 
+    m.status === 'FINALIZADO' || m.status === 'FINISHED' || String(m.finished).toUpperCase() === 'TRUE' || m.finished === true
+  );
+  if (finished.length > 0) {
+    // Ordenamos de ID mayor a menor para agarrar el último que vio el planeta
+    return [...finished].sort((a, b) => Number(b.id) - Number(a.id))[0];
+  }
+  
+  // 3. Fallback de pánico (Día 0 del Mundial, nadie ha jugado nada aún)
+  const scheduled = matchesList.filter(m => m.status === 'PENDIENTE' || m.status === 'SCHEDULED');
+  return scheduled[0] || matchesList[0];
+};
+
+// 3. Captura de partidos solapados secundarios
+const getSecondaryLiveMatches = (matchesList, kingId) => {
+  if (!matchesList || !Array.isArray(matchesList)) return [];
+  return matchesList.filter(m => isActuallyLive(m) && String(m.id) !== String(kingId));
+};
+
 const parseScorers = (scorersRaw) => {
   if (!scorersRaw || scorersRaw === "{}" || scorersRaw === "null") return [];
   if (Array.isArray(scorersRaw)) return scorersRaw;
@@ -432,8 +469,18 @@ function App() {
   }, [matches]);
 
   const handleLogout = () => {
-    setUser(null);
+    // 1. Exterminio de LocalStorage
+    localStorage.removeItem('user_predictions');
+    localStorage.removeItem('user_top4');
     localStorage.removeItem('mundial_user');
+
+    // 2. Exterminio de la memoria RAM de React
+    if (typeof setMatchPredictions === 'function') setMatchPredictions({});
+    if (typeof setPredictions === 'function') setPredictions({ first: '', second: '', third: '', fourth: '' });
+    if (typeof setUserPredictions === 'function') setUserPredictions({});
+    if (typeof setUserTop4 === 'function') setUserTop4({});
+
+    setUser(null);
   };
 
   const handleLogin = async (e) => {
@@ -740,11 +787,13 @@ function App() {
   );
 
   const renderInicio = () => {
-    const liveMatches = matches.filter(m => m.status === 'LIVE' || m.status === 'IN_PLAY' || m.status === 'PAUSED' || m.status === 'EN_CURSO');
-    const sortedLiveMatches = [...liveMatches].sort((a, b) => Number(b.id) - Number(a.id));
+    const mainLive = getCommandCenterKing(matches);
+    const secondaryLiveList = getSecondaryLiveMatches(matches, mainLive?.id);
+
+    const sortedLiveMatches = [mainLive, ...secondaryLiveList].filter(Boolean);
     const finalizados = matches.filter(m => m.status === 'FINALIZADO' || m.status === 'FINISHED').sort((a, b) => new Date(b.date) - new Date(a.date));
-    const featuredMatch = sortedLiveMatches.length > 0 ? sortedLiveMatches[0] : finalizados[0];
-    const isFeaturedLive = featuredMatch && (featuredMatch.status === 'LIVE' || featuredMatch.status === 'IN_PLAY' || featuredMatch.status === 'PAUSED' || featuredMatch.status === 'EN_CURSO');
+    const featuredMatch = mainLive || finalizados[0];
+    const isFeaturedLive = isActuallyLive(featuredMatch);
 
     const now = new Date();
     const pendientes = matches
@@ -774,9 +823,9 @@ function App() {
                     <span className="font-mono text-[10px] bg-slate-800/90 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700/50">
                       #{featuredMatch.id}
                     </span>
-                    <span className={`px-4 py-1.5 rounded-full text-xs font-black tracking-widest ${isFeaturedLive ? 'bg-red-500/20 text-red-400 animate-pulse' : 'bg-slate-700 text-slate-300'}`}>
-                      {isFeaturedLive ? 'EN VIVO' : 'FINALIZADO'}
-                    </span>
+                    {featuredMatch?.status === 'EN_CURSO' && <span className="bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2.5 py-0.5 rounded font-bold animate-pulse">EN VIVO</span>}
+                    {featuredMatch?.status === 'FINALIZADO' && <span className="bg-slate-700/50 text-slate-300 border border-slate-600/50 px-2.5 py-0.5 rounded font-semibold">FINALIZADO</span>}
+                    {featuredMatch?.status === 'PENDIENTE' && <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded font-bold">⏰ PRÓXIMO • {featuredMatch?.time || '13:00'}</span>}
                   </div>
                 </div>
 
@@ -788,12 +837,16 @@ function App() {
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-center px-2 sm:px-6 font-black text-5xl md:text-8xl shrink-0 tracking-tighter tabular-nums">
-                    <div className="flex items-center gap-2 md:gap-4">
-                      <span className={featuredMatch.score1 > featuredMatch.score2 ? 'text-white' : 'text-slate-300'}>{featuredMatch.score1 ?? '-'}</span>
-                      <span className="text-slate-600 pb-2 md:pb-4 text-4xl md:text-6xl">:</span>
-                      <span className={featuredMatch.score2 > featuredMatch.score1 ? 'text-white' : 'text-slate-300'}>{featuredMatch.score2 ?? '-'}</span>
-                    </div>
+                  <div className="flex items-center justify-center gap-4 font-black text-7xl text-slate-100 my-2">
+                    {featuredMatch?.status === 'PENDIENTE' ? (
+                      <span className="text-6xl text-slate-400 font-extrabold tracking-normal py-1">VS</span>
+                    ) : (
+                      <>
+                        <span>{featuredMatch?.score1 ?? 0}</span>
+                        <span className="text-slate-600 font-light">:</span>
+                        <span>{featuredMatch?.score2 ?? 0}</span>
+                      </>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-start gap-2 sm:gap-4 text-left min-w-0">
