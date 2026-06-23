@@ -20,7 +20,7 @@ const parseScorers = (scorersRaw) => {
     // Por si en el futuro la API cambia a JSON real
     const parsed = JSON.parse(scorersRaw);
     if (Array.isArray(parsed)) return parsed;
-  } catch (e) {}
+  } catch (e) { }
 
   // Limpieza de string PostgreSQL: '{"Gol A", "Gol B"}' -> ["Gol A", "Gol B"]
   const cleaned = String(scorersRaw).replace(/^\{|\}$/g, '');
@@ -606,8 +606,8 @@ function App() {
             </button>
           )}
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${isOnline
-              ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-800/50'
-              : 'bg-red-900/40 text-red-400 border border-red-800/50'
+            ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-800/50'
+            : 'bg-red-900/40 text-red-400 border border-red-800/50'
             }`}>
             {isOnline ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
             {isOnline ? 'Online' : 'Offline'}
@@ -1082,10 +1082,10 @@ function App() {
 
       return (
         <div className="bg-slate-800/40 border border-slate-700/60 rounded-lg p-2.5 sm:p-3 flex flex-col gap-2 w-full shadow-sm hover:border-slate-600/50 transition-all">
-          
+
           {/* PISO 1: BARRA DE CABECERA (Ancho completo con borde inferior) */}
           <div className="flex items-center justify-between pb-2 border-b border-slate-700/60 text-xs text-slate-400">
-            
+
             {/* Izquierda: Fecha, Fase y Grupo */}
             <div className="flex items-center gap-1.5 sm:gap-2 font-medium flex-wrap">
               <span className="capitalize text-slate-300">{btz.date}</span>
@@ -1307,8 +1307,8 @@ function App() {
             onClick={handleSavePredictions}
             disabled={!hasUnsavedChanges}
             className={`flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-all w-full sm:w-auto ${hasUnsavedChanges
-                ? 'bg-emerald-500 hover:bg-emerald-600 text-slate-900 shadow-lg shadow-emerald-500/20 transform active:scale-95'
-                : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
+              ? 'bg-emerald-500 hover:bg-emerald-600 text-slate-900 shadow-lg shadow-emerald-500/20 transform active:scale-95'
+              : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
               }`}
           >
             <Save className="w-5 h-5" />
@@ -1391,7 +1391,7 @@ function App() {
 
                       {/* BÚNKER DE 12 COLUMNAS (100% Clases nativas de Tailwind) */}
                       <div className="grid grid-cols-12 items-center gap-1 w-full my-1.5 py-1.5 px-1 text-xs sm:text-sm">
-                        
+
                         {/* COLUMNA 1 a 3 (25% del ancho): Nombre Local */}
                         <div className="col-span-3 flex items-center justify-end text-right pr-0.5 sm:pr-1 overflow-hidden">
                           <span className="font-bold leading-tight line-clamp-2 sm:line-clamp-none text-slate-100">
@@ -1407,39 +1407,39 @@ function App() {
                         {/* COLUMNA 5 a 8 (33% del ancho): Centro (Marcador / VS / Inputs) */}
                         <div className="col-span-4 flex items-center justify-center font-black text-sm sm:text-lg tracking-tighter overflow-hidden">
                           <div className="w-16 sm:w-24 shrink-0 flex items-center justify-center gap-1 font-black text-base sm:text-xl tracking-tighter">
-                              <input
-                                type="number"
-                                min="0"
-                                max="20"
-                                disabled={locked}
-                                placeholder="-"
-                                value={matchPredictions[m.id]?.score1 ?? ''}
-                                onChange={(e) => {
-                                  setMatchPredictions({
-                                    ...matchPredictions,
-                                    [m.id]: { ...matchPredictions[m.id], score1: e.target.value }
-                                  });
-                                  setHasUnsavedChanges(true);
-                                }}
-                                className={`w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 border rounded-xl text-center font-black text-xl sm:text-2xl focus:ring-2 focus:outline-none transition-shadow ${locked ? 'bg-slate-900/50 border-slate-700 text-slate-500 cursor-not-allowed' : 'bg-slate-800 border-slate-600 text-slate-100 focus:ring-emerald-500'}`}
-                              />
-                              <span className="text-slate-600 font-black px-1">-</span>
-                              <input
-                                type="number"
-                                min="0"
-                                max="20"
-                                disabled={locked}
-                                placeholder="-"
-                                value={matchPredictions[m.id]?.score2 ?? ''}
-                                onChange={(e) => {
-                                  setMatchPredictions({
-                                    ...matchPredictions,
-                                    [m.id]: { ...matchPredictions[m.id], score2: e.target.value }
-                                  });
-                                  setHasUnsavedChanges(true);
-                                }}
-                                className={`w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 border rounded-xl text-center font-black text-xl sm:text-2xl focus:ring-2 focus:outline-none transition-shadow ${locked ? 'bg-slate-900/50 border-slate-700 text-slate-500 cursor-not-allowed' : 'bg-slate-800 border-slate-600 text-slate-100 focus:ring-emerald-500'}`}
-                              />
+                            <input
+                              type="number"
+                              min="0"
+                              max="20"
+                              disabled={locked}
+                              placeholder="-"
+                              value={matchPredictions[m.id]?.score1 ?? ''}
+                              onChange={(e) => {
+                                setMatchPredictions({
+                                  ...matchPredictions,
+                                  [m.id]: { ...matchPredictions[m.id], score1: e.target.value }
+                                });
+                                setHasUnsavedChanges(true);
+                              }}
+                              className={`w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 border rounded-xl text-center font-black text-xl sm:text-2xl focus:ring-2 focus:outline-none transition-shadow ${locked ? 'bg-slate-900/50 border-slate-700 text-slate-500 cursor-not-allowed' : 'bg-slate-800 border-slate-600 text-slate-100 focus:ring-emerald-500'}`}
+                            />
+                            <span className="text-slate-600 font-black px-1">-</span>
+                            <input
+                              type="number"
+                              min="0"
+                              max="20"
+                              disabled={locked}
+                              placeholder="-"
+                              value={matchPredictions[m.id]?.score2 ?? ''}
+                              onChange={(e) => {
+                                setMatchPredictions({
+                                  ...matchPredictions,
+                                  [m.id]: { ...matchPredictions[m.id], score2: e.target.value }
+                                });
+                                setHasUnsavedChanges(true);
+                              }}
+                              className={`w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 border rounded-xl text-center font-black text-xl sm:text-2xl focus:ring-2 focus:outline-none transition-shadow ${locked ? 'bg-slate-900/50 border-slate-700 text-slate-500 cursor-not-allowed' : 'bg-slate-800 border-slate-600 text-slate-100 focus:ring-emerald-500'}`}
+                            />
                           </div>
                         </div>
 
@@ -1503,8 +1503,8 @@ function App() {
             key={tab.id}
             onClick={() => handleTabChange(tab.id)}
             className={`flex flex-col items-center justify-center p-2 w-[72px] md:w-24 rounded-2xl transition-all duration-300 relative ${currentTab === tab.id
-                ? 'text-emerald-400 bg-emerald-500/10 scale-105'
-                : 'text-slate-400 hover:text-slate-300 hover:bg-slate-700/50'
+              ? 'text-emerald-400 bg-emerald-500/10 scale-105'
+              : 'text-slate-400 hover:text-slate-300 hover:bg-slate-700/50'
               }`}
           >
             {tab.alert && currentTab !== tab.id && (
