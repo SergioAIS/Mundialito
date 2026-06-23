@@ -22,22 +22,22 @@ const isActuallyLive = (m) => {
 // 2. El Rey del Centro de Comando (Línea de sucesión anti-pantalla blanca)
 const getCommandCenterKing = (matchesList) => {
   if (!matchesList || !Array.isArray(matchesList) || matchesList.length === 0) return null;
-  
+
   // 1. PRIORIDAD ABSOLUTA: El Rey (Partidos jugándose AHORA)
   const live = matchesList.filter(isActuallyLive);
   if (live.length > 0) {
     return [...live].sort((a, b) => Number(b.id) - Number(a.id))[0];
   }
-  
+
   // 2. EL CAMBIO UX: El Regente (El ÚLTIMO partido de la historia que terminó)
-  const finished = matchesList.filter(m => 
+  const finished = matchesList.filter(m =>
     m.status === 'FINALIZADO' || m.status === 'FINISHED' || String(m.finished).toUpperCase() === 'TRUE' || m.finished === true
   );
   if (finished.length > 0) {
     // Ordenamos de ID mayor a menor para agarrar el último que vio el planeta
     return [...finished].sort((a, b) => Number(b.id) - Number(a.id))[0];
   }
-  
+
   // 3. Fallback de pánico (Día 0 del Mundial, nadie ha jugado nada aún)
   const scheduled = matchesList.filter(m => m.status === 'PENDIENTE' || m.status === 'SCHEDULED');
   return scheduled[0] || matchesList[0];
@@ -792,7 +792,7 @@ function App() {
 
     const sortedLiveMatches = [mainLive, ...secondaryLiveList].filter(Boolean);
     const finalizados = matches.filter(m => m.status === 'FINALIZADO' || m.status === 'FINISHED').sort((a, b) => new Date(b.date) - new Date(a.date));
-    const featuredMatch = mainLive || finalizados[0];
+    const featuredMatch = mainLive || matches[0];
     const isFeaturedLive = isActuallyLive(featuredMatch);
 
     const now = new Date();
@@ -813,7 +813,7 @@ function App() {
 
             {/* Scoreboard Gigante */}
             {featuredMatch && (
-              <div className="bg-slate-800 border border-slate-700 rounded-3xl p-6 md:p-8 shadow-xl relative overflow-hidden">
+              <div className="bg-slate-800 border border-slate-700 rounded-3xl p-5 md:p-6 shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 to-emerald-400"></div>
                 <div className="flex justify-between items-center mb-8">
                   <span className="text-xs md:text-sm font-bold text-slate-400 uppercase tracking-wider">
@@ -823,21 +823,25 @@ function App() {
                     <span className="font-mono text-[10px] bg-slate-800/90 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700/50">
                       #{featuredMatch.id}
                     </span>
-                    {featuredMatch?.status === 'EN_CURSO' && <span className="bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2.5 py-0.5 rounded font-bold animate-pulse">EN VIVO</span>}
-                    {featuredMatch?.status === 'FINALIZADO' && <span className="bg-slate-700/50 text-slate-300 border border-slate-600/50 px-2.5 py-0.5 rounded font-semibold">FINALIZADO</span>}
-                    {featuredMatch?.status === 'PENDIENTE' && <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded font-bold">⏰ PRÓXIMO • {featuredMatch?.time || '13:00'}</span>}
+                    {featuredMatch?.status === 'EN_CURSO' ? (
+                      <span className="bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2.5 py-0.5 rounded font-bold animate-pulse">EN VIVO</span>
+                    ) : featuredMatch?.status === 'FINALIZADO' ? (
+                      <span className="bg-slate-700/50 text-slate-300 border border-slate-600/50 px-2.5 py-0.5 rounded font-semibold">FINALIZADO</span>
+                    ) : (
+                      <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded font-bold">⏰ PRÓXIMO • {featuredMatch?.time || '13:00'}</span>
+                    )}
                   </div>
                 </div>
 
                 <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-6 w-full mt-4 mb-2 py-2 px-1 md:px-8">
                   <div className="flex items-center justify-end gap-2 sm:gap-4 text-right min-w-0">
                     <span className="font-bold text-lg md:text-2xl leading-tight whitespace-normal break-words">{featuredMatch.team1}</span>
-                    <span className="shrink-0 flex items-center justify-center w-12 sm:w-20 h-10 sm:h-16 text-5xl md:text-8xl overflow-visible">
+                    <span className="shrink-0 flex items-center justify-center w-12 sm:w-20 h-10 sm:h-16 text-5xl md:text-6xl overflow-visible">
                       {typeof getFlag(featuredMatch.team1) === 'string' && getFlag(featuredMatch.team1).startsWith('http') ? <img src={getFlag(featuredMatch.team1)} alt={featuredMatch.team1} className="w-full h-full object-contain drop-shadow-sm" /> : getFlag(featuredMatch.team1)}
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-center gap-4 font-black text-7xl text-slate-100 my-2">
+                  <div className="flex items-center justify-center gap-4 font-black text-6xl text-slate-100 my-1">
                     {featuredMatch?.status === 'PENDIENTE' ? (
                       <span className="text-6xl text-slate-400 font-extrabold tracking-normal py-1">VS</span>
                     ) : (
@@ -850,14 +854,14 @@ function App() {
                   </div>
 
                   <div className="flex items-center justify-start gap-2 sm:gap-4 text-left min-w-0">
-                    <span className="shrink-0 flex items-center justify-center w-12 sm:w-20 h-10 sm:h-16 text-5xl md:text-8xl overflow-visible">
+                    <span className="shrink-0 flex items-center justify-center w-12 sm:w-20 h-10 sm:h-16 text-5xl md:text-6xl overflow-visible">
                       {typeof getFlag(featuredMatch.team2) === 'string' && getFlag(featuredMatch.team2).startsWith('http') ? <img src={getFlag(featuredMatch.team2)} alt={featuredMatch.team2} className="w-full h-full object-contain drop-shadow-sm" /> : getFlag(featuredMatch.team2)}
                     </span>
                     <span className="font-bold text-lg md:text-2xl leading-tight whitespace-normal break-words">{featuredMatch.team2}</span>
                   </div>
                 </div>
 
-                {(parseScorers(featuredMatch.home_scorers).length > 0 || parseScorers(featuredMatch.away_scorers).length > 0) && (
+                {(featuredMatch?.status === 'EN_CURSO' || featuredMatch?.status === 'FINALIZADO') && (parseScorers(featuredMatch.home_scorers).length > 0 || parseScorers(featuredMatch.away_scorers).length > 0) && (
                   <div className="grid grid-cols-[1fr_auto_1fr] gap-1 sm:gap-3 px-2 sm:px-4 pb-3 pt-1 text-[11px] sm:text-xs text-slate-300 border-t border-slate-800/80 mt-1">
                     {/* Goleadores Local (Izquierda) */}
                     <div className="flex flex-col items-end text-right">
@@ -1008,7 +1012,7 @@ function App() {
               {[mainLive, ...secondaryLiveList].filter(Boolean).map((activeMatch) => {
                 const matchVotes = communityVotes.filter(v => String(v.partido_id) === String(activeMatch.id));
                 const isMatchLive = isActuallyLive(activeMatch);
-                
+
                 return (
                   <div key={activeMatch.id} className="bg-slate-800 border border-slate-700 rounded-3xl p-6 shadow-md">
                     <h3 className="text-lg font-bold mb-4 flex items-center gap-2 border-b border-slate-700 pb-3 text-slate-100">
