@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wifi, WifiOff, Trophy, User, CloudUpload, Send, Home, Calendar, Users, ListOrdered, Edit3, Save, Medal, Lock, ChevronDown, ChevronUp, Loader2, LogOut, Smartphone, Monitor, Share, PlusSquare } from 'lucide-react';
+import { Wifi, WifiOff, Trophy, User, CloudUpload, Send, Home, Calendar, Users, ListOrdered, Edit3, Save, Medal, Lock, ChevronDown, ChevronUp, Loader2, LogOut, Smartphone, Monitor, Share, PlusSquare, Shuffle } from 'lucide-react';
 import offlineStorage from './utils/offlineStorage';
 import { communityPredictions } from './data/mundialData';
 import { fetchLiveMatches, calculateStandings, getBoliviaTimeData, TEAM_DICTIONARY } from './services/api';
@@ -45,6 +45,17 @@ const getCommandCenterKings = (matchesList) => {
   // 3. Fallback Día 0
   const scheduled = matchesList.filter(m => m.status === 'PENDIENTE' || m.status === 'SCHEDULED');
   return scheduled.length > 0 ? [scheduled[0]] : [matchesList[0]];
+};
+
+const getNextCommandCenterMatches = (matchesList) => {
+  if (!matchesList || !Array.isArray(matchesList)) return [];
+  const scheduled = matchesList
+    .filter(m => m.status === 'PENDIENTE' || m.status === 'SCHEDULED')
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  if (scheduled.length === 0) return [];
+  const targetDate = scheduled[0].date;
+  return scheduled.filter(m => m.date === targetDate);
 };
 
 // 3. Captura de partidos solapados secundarios
@@ -635,7 +646,11 @@ function App() {
           {user && (
             <div className="flex items-center gap-3">
               <div className="flex items-center bg-emerald-900/40 border border-emerald-500/30 px-3 py-1.5 rounded-full shadow-inner">
-                <span className="text-sm font-bold text-emerald-400 whitespace-nowrap">Puntos: {userPoints}</span>
+                <span className="text-sm font-bold text-emerald-400 whitespace-nowrap">
+                  Puntos: {communityLeaderboard?.find(u => 
+                    String(u.usuario || '').toLowerCase() === String(user?.username || user?.name || '').toLowerCase()
+                  )?.puntos ?? 0}
+                </span>
               </div>
               <div className="hidden sm:flex items-center gap-2 text-sm bg-slate-700 px-3 py-1.5 rounded-full text-slate-200 border border-slate-600">
                 <User className="w-4 h-4" />
@@ -802,7 +817,7 @@ function App() {
     const pendientes = matches
       .filter(m => m.status === 'PENDIENTE' && new Date(m.date) > now)
       .sort((a, b) => new Date(a.date) - new Date(b.date));
-    const nextMatch = pendientes[0];
+    const nextMatchesList = getNextCommandCenterMatches(matches);
 
     const userTop4 = Object.entries(predictions).filter(([k, v]) => v !== '');
 
@@ -922,25 +937,30 @@ function App() {
         </div>
 
             {/* Próximo Partido */}
-            {nextMatch && (
-              <div className="bg-slate-800/80 border border-slate-700 rounded-2xl p-5 flex flex-col md:flex-row items-start md:items-center justify-between shadow-md gap-4">
-                <div className="flex flex-col">
-                  <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                    <Calendar className="w-4 h-4" /> Próximo Partido
-                    <span className="font-mono text-[10px] bg-slate-800/90 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700/50 ml-auto">
-                      #{nextMatch.id}
-                    </span>
-                  </span>
-                  <div className="flex items-center gap-3 text-lg md:text-xl font-bold">
-                    <span className="text-2xl">{getFlag(nextMatch.team1)}</span> {nextMatch.team1}
-                    <span className="text-slate-500 font-normal mx-1">vs</span>
-                    {nextMatch.team2} <span className="text-2xl">{getFlag(nextMatch.team2)}</span>
+            {nextMatchesList.length > 0 && (
+              <div className="flex flex-col gap-2.5 w-full my-2">
+                <span className="text-[10px] font-black tracking-widest text-emerald-400 uppercase ml-1">⏰ Próximos Encuentros Simultáneos</span>
+                {nextMatchesList.map((nextMatch) => (
+                  <div key={nextMatch.id} className="bg-slate-800/80 border border-slate-700 rounded-2xl p-5 flex flex-col md:flex-row items-start md:items-center justify-between shadow-md gap-4">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                        <Calendar className="w-4 h-4" /> Próximo Partido
+                        <span className="font-mono text-[10px] bg-slate-800/90 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700/50 ml-auto">
+                          #{nextMatch.id}
+                        </span>
+                      </span>
+                      <div className="flex items-center gap-3 text-lg md:text-xl font-bold">
+                        <span className="text-2xl">{getFlag(nextMatch.team1)}</span> {nextMatch.team1}
+                        <span className="text-slate-500 font-normal mx-1">vs</span>
+                        {nextMatch.team2} <span className="text-2xl">{getFlag(nextMatch.team2)}</span>
+                      </div>
+                    </div>
+                    <div className="flex md:flex-col items-center md:items-end w-full md:w-auto justify-between md:justify-center border-t md:border-t-0 border-slate-700 pt-3 md:pt-0">
+                      <span className="text-sm font-medium text-slate-300 capitalize">{getBoliviaTimeData(nextMatch.date).date}</span>
+                      <span className="text-2xl font-black font-mono text-emerald-400">{getBoliviaTimeData(nextMatch.date).time}</span>
+                    </div>
                   </div>
-                </div>
-                <div className="flex md:flex-col items-center md:items-end w-full md:w-auto justify-between md:justify-center border-t md:border-t-0 border-slate-700 pt-3 md:pt-0">
-                  <span className="text-sm font-medium text-slate-300 capitalize">{getBoliviaTimeData(nextMatch.date).date}</span>
-                  <span className="text-2xl font-black font-mono text-emerald-400">{getBoliviaTimeData(nextMatch.date).time}</span>
-                </div>
+                ))}
               </div>
             )}
 
@@ -1371,6 +1391,38 @@ function App() {
           </div>
         ))}
       </div>
+
+      {/* TABLA DE MEJORES TERCEROS */}
+      {groupsData?.bestThirds && groupsData.bestThirds.length > 0 && (
+        <div className="mt-8 bg-slate-900/60 border border-amber-500/30 rounded-xl p-3 sm:p-4 shadow-lg w-full mb-8">
+          <div className="flex items-center justify-between border-b border-amber-500/20 pb-2 mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🔥</span>
+              <h3 className="font-black tracking-wider text-amber-400 text-xs sm:text-sm uppercase">Tabla de Mejores Terceros</h3>
+            </div>
+            <span className="text-[10px] bg-amber-500/10 text-amber-300 border border-amber-500/20 px-2 py-0.5 rounded font-mono">Clasifican Top 8</span>
+          </div>
+
+          <div className="flex flex-col gap-1 w-full text-xs">
+            {groupsData.bestThirds.map((team, idx) => {
+              const isQualifying = idx < 8; // Los 8 primeros van a Dieciseisavos
+              return (
+                <div key={team.name} className={`flex items-center justify-between p-2 rounded ${isQualifying ? 'bg-amber-500/10 border-l-2 border-amber-400 text-slate-100 font-bold' : 'bg-slate-800/30 opacity-50 text-slate-400'}`}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-mono text-[10px] w-4">{idx + 1}º</span>
+                    <span className="truncate">{team.name}</span>
+                    <span className="text-[9px] bg-slate-800 px-1 rounded text-amber-400/80">({team.grupoOrigen})</span>
+                  </div>
+                  <div className="flex items-center gap-3 font-mono shrink-0">
+                    <span>{team.pts} pts</span>
+                    <span className="text-[10px] text-slate-400">{team.dg > 0 ? `+${team.dg}` : team.dg} DG</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -1483,7 +1535,7 @@ function App() {
                         {/* COLUMNA 1 a 3 (25% del ancho): Nombre Local */}
                         <div className="col-span-3 flex items-center justify-end text-right pr-0.5 sm:pr-1 overflow-hidden">
                           <span className="font-bold leading-tight line-clamp-2 sm:line-clamp-none text-slate-100">
-                            {m.team1}
+                            {formatBracketTeam(m.team1)}
                           </span>
                         </div>
 
@@ -1539,7 +1591,7 @@ function App() {
                         {/* COLUMNA 10 a 12 (25% del ancho): Nombre Visitante */}
                         <div className="col-span-3 flex items-center justify-start text-left pl-0.5 sm:pl-1 overflow-hidden">
                           <span className="font-bold leading-tight line-clamp-2 sm:line-clamp-none text-slate-100">
-                            {m.team2}
+                            {formatBracketTeam(m.team2)}
                           </span>
                         </div>
 
@@ -1550,6 +1602,85 @@ function App() {
               </div>
             </div>
           </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderBracket = () => {
+    const knockoutMatches = matches.filter(m => m.matchType !== 'group' && m.stage !== 'Fase de Grupos');
+
+    const rondas = [
+      { id: 'r32', nombre: 'Dieciseisavos' },
+      { id: 'r16', nombre: 'Octavos' },
+      { id: 'qf', nombre: 'Cuartos' },
+      { id: 'sf', nombre: 'Semifinales' },
+      { id: 'final', nombre: 'Gran Final' }
+    ];
+
+    return (
+      <div className="w-full overflow-x-auto pb-8 pt-2 select-none custom-scrollbar">
+        <div className="flex gap-6 min-w-[950px] px-4">
+          {rondas.map((ronda) => {
+            const rondaMatches = knockoutMatches.filter(m => 
+              String(m.stage || '').toLowerCase().includes(ronda.nombre.toLowerCase()) ||
+              String(m.matchType || '').toLowerCase() === ronda.id
+            );
+
+            return (
+              <div key={ronda.id} className="flex flex-col gap-4 w-[200px] shrink-0">
+                <div className="bg-slate-800/80 border-b-2 border-amber-500 text-amber-400 font-black text-xs py-1.5 px-3 rounded-t text-center uppercase tracking-wider shadow">
+                  {ronda.nombre}
+                </div>
+                <div className="flex flex-col gap-3 justify-around h-full">
+                  {rondaMatches.map((m) => (
+                    <div key={m.id} className="bg-slate-900/90 border border-slate-700/60 rounded p-2 text-xs shadow-md relative flex flex-col justify-center">
+                      <div className="flex justify-between items-center text-slate-300 font-semibold mb-1 truncate">
+                        <span>{m.flag1} {formatBracketTeam(m.team1)}</span>
+                        <span className="font-mono bg-slate-800 px-1.5 py-0.5 rounded text-[11px] font-bold">{m.score1 ?? '-'}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-slate-300 font-semibold truncate">
+                        <span>{m.flag2} {formatBracketTeam(m.team2)}</span>
+                        <span className="font-mono bg-slate-800 px-1.5 py-0.5 rounded text-[11px] font-bold">{m.score2 ?? '-'}</span>
+                      </div>
+                      <span className="absolute -right-2 top-1/2 -translate-y-1/2 text-[9px] font-mono text-slate-600 bg-slate-950 px-1 rounded border border-slate-800">
+                        #{m.id}
+                      </span>
+                      {/* Conector óptico hacia la siguiente ronda */}
+                      {ronda.id !== 'final' && (
+                        <span className="absolute -right-6 top-1/2 w-6 h-[2px] bg-amber-500/40 pointer-events-none hidden sm:block"></span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Partido por el 3º Puesto */}
+                {ronda.id === 'final' && (
+                  <div className="mt-8 pt-4 border-t border-slate-800 flex flex-col gap-2">
+                    <span className="text-[10px] font-bold text-amber-500 uppercase text-center tracking-widest">🥉 Tercer Puesto</span>
+                    {knockoutMatches
+                      .filter(m => m.matchType === 'third_place' || String(m.stage).includes('3rd') || m.id === '103')
+                      .map(m3 => (
+                        <div key={m3.id} className="bg-slate-900/90 border border-slate-700/60 rounded p-2 text-xs shadow-md relative flex flex-col justify-center">
+                          <div className="flex justify-between items-center text-slate-300 font-semibold mb-1 truncate">
+                            <span>{m3.flag1} {formatBracketTeam(m3.team1)}</span>
+                            <span className="font-mono bg-slate-800 px-1.5 py-0.5 rounded text-[11px] font-bold">{m3.score1 ?? '-'}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-slate-300 font-semibold truncate">
+                            <span>{m3.flag2} {formatBracketTeam(m3.team2)}</span>
+                            <span className="font-mono bg-slate-800 px-1.5 py-0.5 rounded text-[11px] font-bold">{m3.score2 ?? '-'}</span>
+                          </div>
+                          <span className="absolute -right-2 top-1/2 -translate-y-1/2 text-[9px] font-mono text-slate-600 bg-slate-950 px-1 rounded border border-slate-800">
+                            #{m3.id}
+                          </span>
+                        </div>
+                      ))
+                    }
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -1573,6 +1704,7 @@ function App() {
       case 'horario': return renderHorario();
       case 'puntuaciones': return renderPuntuaciones();
       case 'predicciones': return renderPredicciones();
+      case 'bracket': return renderBracket();
       default: return renderInicio();
     }
   };
@@ -1585,6 +1717,7 @@ function App() {
           { id: 'inicio', icon: Home, label: 'Inicio' },
           { id: 'horario', icon: Calendar, label: 'Horario' },
           { id: 'puntuaciones', icon: ListOrdered, label: 'Grupos' },
+          { id: 'bracket', icon: Shuffle, label: 'Torneo' },
           { id: 'predicciones', icon: Edit3, label: 'Predecir', alert: hasUnsavedChanges }
         ].map(tab => (
           <button

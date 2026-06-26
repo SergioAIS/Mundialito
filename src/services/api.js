@@ -210,5 +210,19 @@ export const calculateStandings = (matches) => {
     teams: Object.values(groupsMap[groupName]).sort((a, b) => b.pts !== a.pts ? b.pts - a.pts : (b.dg !== a.dg ? b.dg - a.dg : b.gf - a.gf))
   })).sort((a, b) => a.group.localeCompare(b.group));
 
+  // Pescar exclusivamente al 3º lugar (índice 2) de cada grupo calculado
+  const terceros = formattedStandings
+    .map(g => ({ ...g.teams[2], grupoOrigen: g.group.replace('Grupo ', '') }))
+    .filter(t => t && t.name && t.name !== 'Por definir');
+
+  terceros.sort((a, b) => {
+    if (b.pts !== a.pts) return b.pts - a.pts;
+    if (b.dg !== a.dg) return b.dg - a.dg;
+    if (b.gf !== a.gf) return b.gf - a.gf;
+    return a.name.localeCompare(b.name);
+  });
+
+  formattedStandings.bestThirds = terceros;
+
   return formattedStandings.length > 0 ? formattedStandings : mockGroups;
 };
