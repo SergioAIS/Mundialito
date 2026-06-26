@@ -5,6 +5,9 @@ import { communityPredictions } from './data/mundialData';
 import { fetchLiveMatches, calculateStandings, getBoliviaTimeData, TEAM_DICTIONARY } from './services/api';
 import { supabase } from './services/supabase';
 
+// Bloqueo oficial: Domingo 28 de Junio de 2026 a las 14:59:00 Hora de Bolivia (-04:00)
+const IS_TOP4_LOCKED = new Date() >= new Date("2026-06-28T14:59:00-04:00");
+
 const getTrueMatchTime = (match, btzTime) => {
   if (!match) return btzTime || '';
   // Compara convirtiendo a string para ignorar si la API manda int o string
@@ -20,27 +23,28 @@ const isActuallyLive = (m) => {
 };
 
 // 2. El Rey del Centro de Comando (Línea de sucesión anti-pantalla blanca)
-const getCommandCenterKing = (matchesList) => {
-  if (!matchesList || !Array.isArray(matchesList) || matchesList.length === 0) return null;
+const getCommandCenterKings = (matchesList) => {
+  if (!matchesList || !Array.isArray(matchesList) || matchesList.length === 0) return [];
 
-  // 1. PRIORIDAD ABSOLUTA: El Rey (Partidos jugándose AHORA)
+  // 1. DIARQUÍA VIVA: Todos los partidos jugándose AHORA que compartan hora de inicio
   const live = matchesList.filter(isActuallyLive);
   if (live.length > 0) {
-    return [...live].sort((a, b) => Number(b.id) - Number(a.id))[0];
+    const latest = [...live].sort((a, b) => Number(b.id) - Number(a.id))[0];
+    return live.filter(m => m.date === latest?.date);
   }
 
-  // 2. EL CAMBIO UX: El Regente (El ÚLTIMO partido de la historia que terminó)
-  const finished = matchesList.filter(m =>
+  // 2. DIARQUÍA REGENTE: Los últimos partidos terminados que se jugaron a la vez
+  const finished = matchesList.filter(m => 
     m.status === 'FINALIZADO' || m.status === 'FINISHED' || String(m.finished).toUpperCase() === 'TRUE' || m.finished === true
   );
   if (finished.length > 0) {
-    // Ordenamos de ID mayor a menor para agarrar el último que vio el planeta
-    return [...finished].sort((a, b) => Number(b.id) - Number(a.id))[0];
+    const latestFinished = [...finished].sort((a, b) => Number(b.id) - Number(a.id))[0];
+    return finished.filter(m => m.date === latestFinished?.date);
   }
 
-  // 3. Fallback de pánico (Día 0 del Mundial, nadie ha jugado nada aún)
+  // 3. Fallback Día 0
   const scheduled = matchesList.filter(m => m.status === 'PENDIENTE' || m.status === 'SCHEDULED');
-  return scheduled[0] || matchesList[0];
+  return scheduled.length > 0 ? [scheduled[0]] : [matchesList[0]];
 };
 
 // 3. Captura de partidos solapados secundarios
@@ -420,9 +424,10 @@ function App() {
 
   // Fetch y Suscripción en Tiempo Real de predicciones de la comunidad
   useEffect(() => {
-    const mainLive = getCommandCenterKing(matches);
-    const secondaryLiveList = getSecondaryLiveMatches(matches, mainLive?.id);
-    const activeMatches = [mainLive, ...secondaryLiveList].filter(Boolean);
+    const featuredMatchesList = getCommandCenterKings(matches);
+    const kingIds = featuredMatchesList.map(m => String(m.id));
+    const secondaryLiveList = matches.filter(m => isActuallyLive(m) && !kingIds.includes(String(m.id)));
+    const activeMatches = [...featuredMatchesList, ...secondaryLiveList].filter(Boolean);
     const matchIds = activeMatches.map(m => String(m.id));
 
     if (matchIds.length === 0) return;
@@ -787,13 +792,11 @@ function App() {
   );
 
   const renderInicio = () => {
-    const mainLive = getCommandCenterKing(matches);
-    const secondaryLiveList = getSecondaryLiveMatches(matches, mainLive?.id);
+    const featuredMatchesList = getCommandCenterKings(matches);
+    const kingIds = featuredMatchesList.map(m => String(m.id));
+    const secondaryLiveList = matches.filter(m => isActuallyLive(m) && !kingIds.includes(String(m.id)));
 
-    const sortedLiveMatches = [mainLive, ...secondaryLiveList].filter(Boolean);
     const finalizados = matches.filter(m => m.status === 'FINALIZADO' || m.status === 'FINISHED').sort((a, b) => new Date(b.date) - new Date(a.date));
-    const featuredMatch = mainLive || matches[0];
-    const isFeaturedLive = isActuallyLive(featuredMatch);
 
     const now = new Date();
     const pendientes = matches
@@ -812,9 +815,12 @@ function App() {
           <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-6">
 
             {/* Scoreboard Gigante */}
-            {featuredMatch && (
-              <div className="bg-slate-800 border border-slate-700 rounded-3xl p-5 md:p-6 shadow-xl relative overflow-hidden">
-                <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 to-emerald-400"></div>
+            <div className="flex flex-col gap-4 w-full">
+              {featuredMatchesList.map((featuredMatch) => {
+                const sortedLiveMatches = [featuredMatch, ...secondaryLiveList].filter(Boolean);
+                return (
+                  <div key={featuredMatch.id} className="bg-slate-800 border border-slate-700 rounded-3xl p-5 md:p-6 shadow-xl relative overflow-hidden">
+                    <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 to-emerald-400"></div>
                 <div className="flex justify-between items-center mb-8">
                   <span className="text-xs md:text-sm font-bold text-slate-400 uppercase tracking-wider">
                     {featuredMatch.stage} {featuredMatch.group ? `- ${featuredMatch.group}` : ''}
@@ -911,7 +917,9 @@ function App() {
                   </div>
                 )}
               </div>
-            )}
+            );
+          })}
+        </div>
 
             {/* Próximo Partido */}
             {nextMatch && (
@@ -1009,7 +1017,7 @@ function App() {
 
             {/* 2. Predicciones de la Comunidad (Espejo Simultáneo) */}
             <div className="flex flex-col gap-4">
-              {[mainLive, ...secondaryLiveList].filter(Boolean).map((activeMatch) => {
+              {featuredMatchesList.map((activeMatch) => {
                 const matchVotes = communityVotes.filter(v => String(v.partido_id) === String(activeMatch.id));
                 const isMatchLive = isActuallyLive(activeMatch);
 
@@ -1367,8 +1375,10 @@ function App() {
   );
 
   const renderPredicciones = () => {
-    const pendientes = matches.filter(m => m.status === 'PENDIENTE');
-    const top4Locked = isTop4Locked();
+    const pendientes = matches
+      .filter(m => m.status === 'PENDIENTE' || m.status === 'SCHEDULED')
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const top4Locked = IS_TOP4_LOCKED;
 
     return (
       <div className="w-full max-w-none mx-auto px-2 sm:px-10 py-4">
@@ -1412,7 +1422,7 @@ function App() {
                     <div className="relative">
                       <select
                         value={predictions[pos.id] || ''}
-                        disabled={top4Locked}
+                        disabled={IS_TOP4_LOCKED}
                         onChange={(e) => {
                           setPredictions({ ...predictions, [pos.id]: e.target.value });
                           setHasUnsavedChanges(true);
@@ -1457,9 +1467,15 @@ function App() {
                   return (
                     <div key={m.id} className={`bg-slate-900/40 p-2 sm:p-4 rounded-xl border relative transition-colors ${locked ? 'border-slate-800 opacity-80' : 'border-slate-700/50 hover:border-slate-600'}`}>
                       {locked && <Lock className="w-4 h-4 text-red-400 absolute top-2 left-2 opacity-70" title="Partido Bloqueado" />}
-                      <span className="font-mono text-[10px] bg-slate-800/90 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700/50 absolute top-2 right-2">
-                        #{m.id}
-                      </span>
+                      {/* Cabecera de tarjeta de pronóstico */}
+                      <div className="flex items-center justify-between w-full mb-1.5 text-[10px] sm:text-xs border-b border-slate-700/40 pb-1">
+                        <span className="font-bold uppercase tracking-wider text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/20 truncate max-w-[75%]">
+                          {m.stage || 'Fase de Grupos'}
+                        </span>
+                        <span className="font-mono text-slate-500 shrink-0 ml-1">
+                          #{m.id}
+                        </span>
+                      </div>
 
                       {/* BÚNKER DE 12 COLUMNAS (100% Clases nativas de Tailwind) */}
                       <div className="grid grid-cols-12 items-center gap-1 w-full my-1.5 py-1.5 px-1 text-xs sm:text-sm">
