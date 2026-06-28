@@ -58,7 +58,15 @@ export const MATCH_TIMES_OVERRIDE = {
   "Portugal-Uzbekistan": "2026-06-23T13:00:00-04:00", "Colombia-DR Congo": "2026-06-23T22:00:00-04:00",
   "DR Congo-Uzbekistan": "2026-06-27T19:30:00-04:00", "Colombia-Portugal": "2026-06-27T19:30:00-04:00",
   "England-Ghana": "2026-06-23T16:00:00-04:00", "Panama-Croatia": "2026-06-23T19:00:00-04:00",
-  "Croatia-Ghana": "2026-06-27T17:00:00-04:00", "Panama-England": "2026-06-27T17:00:00-04:00"
+  "Croatia-Ghana": "2026-06-27T17:00:00-04:00", "Panama-England": "2026-06-27T17:00:00-04:00",
+  "Canada-South Africa": "2026-06-28T15:00:00-04:00", "Brazil-Japan": "2026-06-29T13:00:00-04:00",
+  "Germany-Paraguay": "2026-06-29T16:30:00-04:00", "Netherlands-Morocco": "2026-06-29T21:00:00-04:00",
+  "Ivory Coast-Norway": "2026-06-30T13:00:00-04:00", "France-Sweden": "2026-06-30T17:00:00-04:00",
+  "Mexico-Ecuador": "2026-06-30T21:00:00-04:00", "England-Democratic Republic of the Congo": "2026-07-01T12:00:00-04:00",
+  "Belgium-Senegal": "2026-07-01T16:00:00-04:00", "United States-Bosnia and Herzegovina": "2026-07-01T20:00:00-04:00",
+  "Spain-Austria": "2026-07-02T15:00:00-04:00", "Portugal-Croatia": "2026-07-02T19:00:00-04:00",
+  "Switzerland-Algeria": "2026-07-02T23:00:00-04:00", "Australia-Egypt": "2026-07-03T14:00:00-04:00",
+  "Argentina-Cape Verde": "2026-07-03T18:00:00-04:00", "Colombia-Ghana": "2026-07-03T21:30:00-04:00"
 };
 
 export const getBoliviaTimeData = (isoString) => {

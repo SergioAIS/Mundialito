@@ -1610,6 +1610,60 @@ function App() {
   const renderBracket = () => {
     const knockoutMatches = matches.filter(m => m.matchType !== 'group' && m.stage !== 'Fase de Grupos');
 
+    // 1. Construir el árbol de dependencias
+    const getDependencies = (match) => {
+      if (!match) return [];
+      const leftId = match.home_team_label?.match(/Match (\d+)/i)?.[1];
+      const rightId = match.away_team_label?.match(/Match (\d+)/i)?.[1];
+      return [leftId, rightId].filter(Boolean);
+    };
+
+    // Calcular la fecha más temprana (earliest date) de un partido y todos sus predecesores
+    const earliestDateCache = {};
+    const getEarliestDate = (matchId) => {
+      if (earliestDateCache[matchId]) return earliestDateCache[matchId];
+      const match = knockoutMatches.find(m => String(m.id) === String(matchId));
+      if (!match) return Infinity;
+      
+      let minDate = new Date(match.date).getTime();
+      const deps = getDependencies(match);
+      deps.forEach(depId => {
+        const depDate = getEarliestDate(depId);
+        if (depDate < minDate) minDate = depDate;
+      });
+      
+      earliestDateCache[matchId] = minDate;
+      return minDate;
+    };
+
+    // 2. Ordenar topológicamente las rondas
+    // Empezamos por la Final (ID 104) y reconstruimos el bracket hacia atrás
+    const buildBracketOrder = (rootIds) => {
+      let currentLevel = rootIds;
+      const roundsOrder = [];
+      
+      while (currentLevel.length > 0) {
+        roundsOrder.unshift(currentLevel); // Guardamos la ronda actual
+        let nextLevel = [];
+        
+        currentLevel.forEach(matchId => {
+          const match = knockoutMatches.find(m => String(m.id) === String(matchId));
+          const deps = getDependencies(match);
+          // Si tiene dependencias, las ordenamos por su fecha más temprana para que queden cronológicas
+          if (deps.length === 2) {
+            deps.sort((a, b) => getEarliestDate(a) - getEarliestDate(b));
+          }
+          nextLevel.push(...deps);
+        });
+        
+        currentLevel = nextLevel;
+      }
+      return roundsOrder;
+    };
+
+    // Match 104 es la Final
+    const bracketTreeLevels = buildBracketOrder(['104']);
+
     const rondas = [
       { id: 'r32', nombre: 'Dieciseisavos' },
       { id: 'r16', nombre: 'Octavos' },
@@ -1621,11 +1675,27 @@ function App() {
     return (
       <div className="w-full overflow-x-auto pb-8 pt-2 select-none custom-scrollbar">
         <div className="flex gap-6 min-w-[950px] px-4">
-          {rondas.map((ronda) => {
-            const rondaMatches = knockoutMatches.filter(m => 
+          {rondas.map((ronda, roundIdx) => {
+            // Obtenemos los IDs en el orden correcto para esta ronda desde nuestro árbol
+            // Si el árbol no tiene suficientes niveles (ej. datos incompletos), usamos fallback
+            const expectedIds = bracketTreeLevels[roundIdx] || [];
+            
+            // Filtramos los partidos y los ordenamos según expectedIds
+            let rondaMatches = knockoutMatches.filter(m => 
               String(m.stage || '').toLowerCase().includes(ronda.nombre.toLowerCase()) ||
               String(m.matchType || '').toLowerCase() === ronda.id
             );
+
+            if (expectedIds.length > 0) {
+              rondaMatches.sort((a, b) => {
+                const idxA = expectedIds.indexOf(String(a.id));
+                const idxB = expectedIds.indexOf(String(b.id));
+                if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                if (idxA !== -1) return -1;
+                if (idxB !== -1) return 1;
+                return 0;
+              });
+            }
 
             return (
               <div key={ronda.id} className="flex flex-col gap-4 w-[200px] shrink-0">
