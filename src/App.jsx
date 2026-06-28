@@ -182,6 +182,7 @@ function App() {
   const [matches, setMatches] = useState([]);
   const [groupsData, setGroupsData] = useState([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [penaltiesData, setPenaltiesData] = useState({});
 
   // Estado para las predicciones
   const [predictions, setPredictions] = useState({ first: '', second: '', third: '', fourth: '' });
@@ -296,26 +297,81 @@ function App() {
     }
   };
 
+  const fetchPenalties = async () => {
+    try {
+      // Intentar primero desde Supabase (si existe la tabla)
+      const { data, error } = await supabase.from('penales_override').select('*');
+      if (error) throw error;
+      const penMap = {};
+      data.forEach(p => {
+        penMap[p.partido_id] = { pen1: p.pen1, pen2: p.pen2 };
+      });
+      setPenaltiesData(penMap);
+    } catch (e) {
+      // Fallback a localStorage si la tabla aún no existe o hay error
+      console.log("Tabla penales_override no encontrada o error. Usando localStorage.");
+      const localPens = JSON.parse(localStorage.getItem('penales_override') || '{}');
+      setPenaltiesData(localPens);
+    }
+  };
+
+  const savePenaltyScore = async (partidoId, pen1, pen2) => {
+    // Actualizar estado local inmediatamente
+    const updatedPens = { ...penaltiesData, [partidoId]: { pen1, pen2 } };
+    setPenaltiesData(updatedPens);
+    localStorage.setItem('penales_override', JSON.stringify(updatedPens));
+
+    try {
+      // Intentar guardar en Supabase
+      const { error } = await supabase
+        .from('penales_override')
+        .upsert({ partido_id: String(partidoId), pen1: Number(pen1), pen2: Number(pen2) }, { onConflict: 'partido_id' });
+      if (error) throw error;
+    } catch (e) {
+      console.log("No se pudo guardar penal en Supabase, guardado en LocalStorage", e);
+    }
+  };
+
+  const isPenaltyMatch = (match) => {
+    return (
+      match &&
+      match.matchType !== 'group' &&
+      match.stage !== 'Fase de Grupos' &&
+      (match.status === 'FINALIZADO' || match.status === 'TRUE') &&
+      match.score1 === match.score2 &&
+      match.score1 !== null &&
+      match.score1 !== ''
+    );
+  };
+
   // Inicializar usuario y predicciones desde localStorage
   useEffect(() => {
-    const existingUser = localStorage.getItem('mundial_user');
-    if (existingUser) {
+    const initStorage = async () => {
       try {
-        const parsedUser = JSON.parse(existingUser);
-        setUser(parsedUser);
-        // Hidratar on mount si hay usuario guardado
-        hydrateUserData(parsedUser.username || parsedUser.name);
+        await fetchPenalties();
+        const existingUser = localStorage.getItem('mundial_user');
+        if (existingUser) {
+          try {
+            const parsedUser = JSON.parse(existingUser);
+            setUser(parsedUser);
+            // Hidratar on mount si hay usuario guardado
+            hydrateUserData(parsedUser.username || parsedUser.name);
+          } catch (e) {
+            console.error("Error leyendo usuario", e);
+          }
+        } else {
+          const savedPredictions = offlineStorage.getPredictions();
+          if (savedPredictions) setPredictions(savedPredictions);
+
+          const savedMatchPredictions = offlineStorage.getMatchPredictions();
+          if (savedMatchPredictions) setMatchPredictions(savedMatchPredictions);
+        }
       } catch (e) {
-        console.error("Error leyendo usuario", e);
+        console.error("Error al recuperar datos históricos:", e);
       }
-    } else {
-      const savedPredictions = offlineStorage.getPredictions();
-      if (savedPredictions) setPredictions(savedPredictions);
+    };
 
-      const savedMatchPredictions = offlineStorage.getMatchPredictions();
-      if (savedMatchPredictions) setMatchPredictions(savedMatchPredictions);
-    }
-
+    initStorage();
     setQueueLength(offlineStorage.getQueue().length);
   }, []);
 
@@ -1217,8 +1273,46 @@ function App() {
               <span className="text-2xl">{getFlag(match.team1)}</span>
             </div>
 
-            <div className="px-2.5 sm:px-3.5 py-0.5 sm:py-1 bg-slate-900/90 border border-slate-800/80 rounded font-black text-xs sm:text-sm text-slate-200 tracking-tighter shrink-0 flex items-center justify-center whitespace-nowrap shadow-inner">
-              {isLiveOrFinished ? `${match.score1 ?? 0} : ${match.score2 ?? 0}` : 'VS'}
+            <div className="flex flex-col gap-1 items-center justify-center">
+              <div className="px-2.5 sm:px-3.5 py-0.5 sm:py-1 bg-slate-900/90 border border-slate-800/80 rounded font-black text-xs sm:text-sm text-slate-200 tracking-tighter shrink-0 flex items-center justify-center whitespace-nowrap shadow-inner">
+                {isLiveOrFinished ? `${match.score1 ?? 0} : ${match.score2 ?? 0}` : 'VS'}
+              </div>
+              
+              {isPenaltyMatch(match) && (
+                <div className="flex items-center gap-2 mt-1">
+                  {(user?.username === 'admin123' || user?.name === 'admin123') ? (
+                    <div className="flex items-center gap-1 text-[10px] bg-slate-800 p-1 rounded border border-slate-600">
+                      <input 
+                        type="number" 
+                        className="w-8 text-center bg-slate-900 text-white rounded border border-slate-700" 
+                        defaultValue={penaltiesData[match.id]?.pen1 ?? ''}
+                        id={`pen1-${match.id}`}
+                      />
+                      <span className="text-emerald-400 font-bold">PEN</span>
+                      <input 
+                        type="number" 
+                        className="w-8 text-center bg-slate-900 text-white rounded border border-slate-700" 
+                        defaultValue={penaltiesData[match.id]?.pen2 ?? ''}
+                        id={`pen2-${match.id}`}
+                      />
+                      <button 
+                        onClick={() => {
+                          const p1 = document.getElementById(`pen1-${match.id}`).value;
+                          const p2 = document.getElementById(`pen2-${match.id}`).value;
+                          savePenaltyScore(match.id, p1, p2);
+                        }}
+                        className="ml-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded px-1"
+                      >
+                        ✓
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                      (PEN {penaltiesData[match.id]?.pen1 ?? '-'} : {penaltiesData[match.id]?.pen2 ?? '-'})
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-start gap-2 flex-1">
@@ -1707,11 +1801,21 @@ function App() {
                     <div key={m.id} className="bg-slate-900/90 border border-slate-700/60 rounded p-2 text-xs shadow-md relative flex flex-col justify-center">
                       <div className="flex justify-between items-center text-slate-300 font-semibold mb-1 truncate">
                         <span>{m.flag1} {formatBracketTeam(m.team1)}</span>
-                        <span className="font-mono bg-slate-800 px-1.5 py-0.5 rounded text-[11px] font-bold">{m.score1 ?? '-'}</span>
+                        <div className="flex items-center gap-1">
+                          {isPenaltyMatch(m) && <span className="text-[9px] text-emerald-400 bg-emerald-900/50 px-1 rounded border border-emerald-800 font-mono">P:{penaltiesData[m.id]?.pen1 ?? '-'}</span>}
+                          <span className="font-mono bg-slate-800 px-1.5 py-0.5 rounded text-[11px] font-bold">
+                            {m.status !== 'PENDIENTE' ? (m.score1 ?? '-') : '-'}
+                          </span>
+                        </div>
                       </div>
                       <div className="flex justify-between items-center text-slate-300 font-semibold truncate">
                         <span>{m.flag2} {formatBracketTeam(m.team2)}</span>
-                        <span className="font-mono bg-slate-800 px-1.5 py-0.5 rounded text-[11px] font-bold">{m.score2 ?? '-'}</span>
+                        <div className="flex items-center gap-1">
+                          {isPenaltyMatch(m) && <span className="text-[9px] text-emerald-400 bg-emerald-900/50 px-1 rounded border border-emerald-800 font-mono">P:{penaltiesData[m.id]?.pen2 ?? '-'}</span>}
+                          <span className="font-mono bg-slate-800 px-1.5 py-0.5 rounded text-[11px] font-bold">
+                            {m.status !== 'PENDIENTE' ? (m.score2 ?? '-') : '-'}
+                          </span>
+                        </div>
                       </div>
                       <span className="absolute -right-2 top-1/2 -translate-y-1/2 text-[9px] font-mono text-slate-600 bg-slate-950 px-1 rounded border border-slate-800">
                         #{m.id}

@@ -166,7 +166,9 @@ export const fetchLiveMatches = async () => {
       time: boData.time,
       stage: game.type === 'group' ? 'Fase de Grupos' : game.type,
       group: game.group,
-      matchType: game.type
+      matchType: game.type,
+      home_team_label: game.home_team_label,
+      away_team_label: game.away_team_label
     };
 
     if (String(mappedGame.id) === "47" || (mappedGame.team1?.includes('Colombia') && mappedGame.team2?.includes('Congo'))) {
