@@ -29,7 +29,7 @@ const getCommandCenterKings = (matchesList) => {
   // 1. DIARQUÍA VIVA: Todos los partidos jugándose AHORA que compartan hora de inicio
   const live = matchesList.filter(isActuallyLive);
   if (live.length > 0) {
-    const latest = [...live].sort((a, b) => Number(b.id) - Number(a.id))[0];
+    const latest = [...live].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
     return live.filter(m => m.date === latest?.date);
   }
 
@@ -38,7 +38,7 @@ const getCommandCenterKings = (matchesList) => {
     m.status === 'FINALIZADO' || m.status === 'FINISHED' || String(m.finished).toUpperCase() === 'TRUE' || m.finished === true
   );
   if (finished.length > 0) {
-    const latestFinished = [...finished].sort((a, b) => Number(b.id) - Number(a.id))[0];
+    const latestFinished = [...finished].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
     return finished.filter(m => m.date === latestFinished?.date);
   }
 
@@ -133,7 +133,72 @@ const isMatchLocked = (match) => {
   return Date.now() >= matchTime - 60000; // 1 minuto antes
 };
 
-const fetchMyExactSupabaseScore = async (username, finishedMatchesMap) => {
+export const getTournamentTop4Info = (allMatches, penMap = {}) => {
+  const match104 = allMatches.find(m => String(m.id) === '104');
+  const match103 = allMatches.find(m => String(m.id) === '103');
+  
+  const info = {
+    first: null, second: null, third: null, fourth: null,
+    finalists: [], thirdPlaceContenders: [],
+    is104Finished: false, is103Finished: false
+  };
+
+  const isFinished = (m) => (m && (m.status === 'FINALIZADO' || m.status === 'FINISHED' || String(m.finished).toUpperCase() === 'TRUE' || m.finished === true));
+
+  if (match104) {
+    info.finalists = [match104.home_team_name_en, match104.away_team_name_en, match104.team1, match104.team2].filter(Boolean);
+    if (isFinished(match104)) {
+      info.is104Finished = true;
+      let s1 = Number(match104.score1);
+      let s2 = Number(match104.score2);
+      let t1 = match104.team1 || match104.home_team_name_en;
+      let t2 = match104.team2 || match104.away_team_name_en;
+      if (s1 === s2) {
+        const pen1 = Number(penMap[match104.id]?.pen1 || 0);
+        const pen2 = Number(penMap[match104.id]?.pen2 || 0);
+        if (pen1 > pen2) { info.first = t1; info.second = t2; }
+        else if (pen2 > pen1) { info.first = t2; info.second = t1; }
+      } else if (s1 > s2) { info.first = t1; info.second = t2; }
+      else if (s2 > s1) { info.first = t2; info.second = t1; }
+    }
+  }
+
+  if (match103) {
+    info.thirdPlaceContenders = [match103.home_team_name_en, match103.away_team_name_en, match103.team1, match103.team2].filter(Boolean);
+    if (isFinished(match103)) {
+      info.is103Finished = true;
+      let s1 = Number(match103.score1);
+      let s2 = Number(match103.score2);
+      let t1 = match103.team1 || match103.home_team_name_en;
+      let t2 = match103.team2 || match103.away_team_name_en;
+      if (s1 === s2) {
+        const pen1 = Number(penMap[match103.id]?.pen1 || 0);
+        const pen2 = Number(penMap[match103.id]?.pen2 || 0);
+        if (pen1 > pen2) { info.third = t1; info.fourth = t2; }
+        else if (pen2 > pen1) { info.third = t2; info.fourth = t1; }
+      } else if (s1 > s2) { info.third = t1; info.fourth = t2; }
+      else if (s2 > s1) { info.third = t2; info.fourth = t1; }
+    }
+  }
+  
+  return info;
+};
+
+export const getBadgeForPrediction = (predictedTeam, predictedSlot, info) => {
+  if (!predictedTeam || !info || (!info.is103Finished && !info.is104Finished)) return null;
+
+  if (predictedTeam === info.first) return predictedSlot === 'first' ? 5 : 2;
+  if (predictedTeam === info.second) return predictedSlot === 'second' ? 5 : 2;
+  if (predictedTeam === info.third) return predictedSlot === 'third' ? 5 : 2;
+  if (predictedTeam === info.fourth) return predictedSlot === 'fourth' ? 5 : 2;
+
+  if (!info.is104Finished && info.finalists.includes(predictedTeam)) return null;
+  if (!info.is103Finished && info.thirdPlaceContenders.includes(predictedTeam)) return null;
+
+  return 0;
+};
+
+const fetchMyExactSupabaseScore = async (username, finishedMatchesMap, top4Info) => {
   if (!username || !finishedMatchesMap) return 0;
   try {
     const { data: myBets } = await supabase
@@ -141,25 +206,43 @@ const fetchMyExactSupabaseScore = async (username, finishedMatchesMap) => {
       .select('*')
       .eq('usuario', username);
 
-    if (!myBets) return 0;
+    const { data: myTop4 } = await supabase
+      .from('top4_comunidad')
+      .select('*')
+      .eq('usuario', username);
 
     let total = 0;
-    myBets.forEach(bet => {
-      const match = finishedMatchesMap[bet.partido_id];
-      if (match) {
-        const actualScore = `${match.score1} - ${match.score2}`;
-        if (bet.prediccion === actualScore) total += 3;
-        else {
-          const betGoles = bet.prediccion.split(' - ').map(Number);
-          const realGoles = [Number(match.score1), Number(match.score2)];
-          const betDiff = betGoles[0] - betGoles[1];
-          const realDiff = realGoles[0] - realGoles[1];
-          if ((betDiff > 0 && realDiff > 0) || (betDiff < 0 && realDiff < 0) || (betDiff === 0 && realDiff === 0)) {
-            total += 1;
+    if (myBets) {
+      myBets.forEach(bet => {
+        const match = finishedMatchesMap[bet.partido_id];
+        if (match) {
+          const actualScore = `${match.score1} - ${match.score2}`;
+          if (bet.prediccion === actualScore) total += 3;
+          else {
+            const betGoles = bet.prediccion.split(' - ').map(Number);
+            const realGoles = [Number(match.score1), Number(match.score2)];
+            const betDiff = betGoles[0] - betGoles[1];
+            const realDiff = realGoles[0] - realGoles[1];
+            if ((betDiff > 0 && realDiff > 0) || (betDiff < 0 && realDiff < 0) || (betDiff === 0 && realDiff === 0)) {
+              total += 1;
+            }
           }
         }
-      }
-    });
+      });
+    }
+
+    if (myTop4 && myTop4.length > 0 && top4Info) {
+      const top4Bet = myTop4[0];
+      const addTop4Pts = (team, slot) => {
+        const badge = getBadgeForPrediction(team, slot, top4Info);
+        if (badge === 5 || badge === 2) total += badge;
+      };
+      addTop4Pts(top4Bet.campeon, 'first');
+      addTop4Pts(top4Bet.subcampeon, 'second');
+      addTop4Pts(top4Bet.tercero, 'third');
+      addTop4Pts(top4Bet.cuarto, 'fourth');
+    }
+
     return total;
   } catch (e) {
     return 0;
@@ -183,6 +266,7 @@ function App() {
   const [groupsData, setGroupsData] = useState([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [penaltiesData, setPenaltiesData] = useState({});
+  const [realTop4Data, setRealTop4Data] = useState(null);
 
   // Estado para las predicciones
   const [predictions, setPredictions] = useState({ first: '', second: '', third: '', fourth: '' });
@@ -375,10 +459,12 @@ function App() {
     setQueueLength(offlineStorage.getQueue().length);
   }, []);
 
-  const calculateGlobalLeaderboard = async (allMatches) => {
+  const calculateGlobalLeaderboard = async (allMatches, top4Info) => {
     try {
       const { data: allBets, error } = await supabase.from('predicciones_comunidad').select('*');
       if (error || !allBets) return;
+
+      const { data: top4Bets } = await supabase.from('top4_comunidad').select('*');
 
       const finishedMatches = allMatches.filter(m => m.status === 'FINALIZADO');
       const finishedMap = {};
@@ -392,6 +478,13 @@ function App() {
           userPoints[bet.usuario] = 0;
         }
       });
+      if (top4Bets) {
+        top4Bets.forEach(bet => {
+          if (userPoints[bet.usuario] === undefined) {
+            userPoints[bet.usuario] = 0;
+          }
+        });
+      }
 
       allBets.forEach(bet => {
         const matchData = finishedMap[bet.partido_id];
@@ -404,12 +497,26 @@ function App() {
         }
       });
 
+      if (top4Bets && top4Info) {
+        top4Bets.forEach(bet => {
+          const addTop4Pts = (team, slot) => {
+            const badge = getBadgeForPrediction(team, slot, top4Info);
+            if (badge === 5 || badge === 2) userPoints[bet.usuario] += badge;
+          };
+          addTop4Pts(bet.campeon, 'first');
+          addTop4Pts(bet.subcampeon, 'second');
+          addTop4Pts(bet.tercero, 'third');
+          addTop4Pts(bet.cuarto, 'fourth');
+        });
+      }
+
       const leaderboard = Object.keys(userPoints).map(user => ({
         usuario: user,
         puntos: userPoints[user]
       })).sort((a, b) => b.puntos - a.puntos);
 
       setCommunityLeaderboard(leaderboard);
+
     } catch (err) {
       console.error("Error calculando leaderboard:", err);
     }
@@ -432,14 +539,18 @@ function App() {
           setCommunityTop4(top4Res.data);
         }
 
+        // Calcular info del Top 4 Real
+        const top4Info = getTournamentTop4Info(matchesRes, penaltiesData);
+        setRealTop4Data(top4Info);
+
         // Calcular Leaderboard global
-        await calculateGlobalLeaderboard(matchesRes);
+        await calculateGlobalLeaderboard(matchesRes, top4Info);
 
         const mapaPartidosFinalizados = {};
         matchesRes.filter(m => m.status === 'FINALIZADO').forEach(m => {
           mapaPartidosFinalizados[m.id] = m;
         });
-        fetchMyExactSupabaseScore(user?.username || user?.name, mapaPartidosFinalizados).then(score => setUserPoints(score));
+        fetchMyExactSupabaseScore(user?.username || user?.name, mapaPartidosFinalizados, top4Info).then(score => setUserPoints(score));
       } catch (error) {
         console.error("Error al cargar la aplicación", error);
       } finally {
@@ -1037,6 +1148,13 @@ function App() {
                       <span className={`text-sm font-black ${pos.color}`}>{pos.label}</span>
                       <span className="text-2xl drop-shadow-sm">{getFlag(pos.team)}</span>
                       <span className="text-xs font-bold text-slate-200 truncate">{pos.team}</span>
+                      {(() => {
+                        const pts = getBadgeForPrediction(pos.team, pos.id, realTop4Data);
+                        if (pts === null) return null;
+                        if (pts === 5) return <span className="ml-auto text-[10px] font-black bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/30">+5</span>;
+                        if (pts === 2) return <span className="ml-auto text-[10px] font-black bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded border border-yellow-500/30">+2</span>;
+                        return <span className="ml-auto text-[10px] font-black bg-slate-500/20 text-slate-400 px-1.5 py-0.5 rounded border border-slate-500/30">+0</span>;
+                      })()}
                     </div>
                   ))}
                 </div>
@@ -1170,16 +1288,23 @@ function App() {
 
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                         {[
-                          { l: '1º', team: top4Row.campeon, c: 'text-yellow-400' },
-                          { l: '2º', team: top4Row.subcampeon, c: 'text-slate-300' },
-                          { l: '3º', team: top4Row.tercero, c: 'text-amber-600' },
-                          { l: '4º', team: top4Row.cuarto, c: 'text-slate-500' }
-                        ].map(({ l, team, c }) => (
+                          { id: 'first', l: '1º', team: top4Row.campeon, c: 'text-yellow-400' },
+                          { id: 'second', l: '2º', team: top4Row.subcampeon, c: 'text-slate-300' },
+                          { id: 'third', l: '3º', team: top4Row.tercero, c: 'text-amber-600' },
+                          { id: 'fourth', l: '4º', team: top4Row.cuarto, c: 'text-slate-500' }
+                        ].map(({ id, l, team, c }) => (
                           team ? (
                             <div key={l} className="flex items-center gap-2 bg-slate-800/80 p-2 rounded-lg border border-slate-700/50">
                               <span className={`text-xs font-black ${c}`}>{l}</span>
                               <span className="text-xl">{getFlag(team)}</span>
                               <span className="text-xs font-bold text-slate-200 truncate" title={team}>{team}</span>
+                              {(() => {
+                                const pts = getBadgeForPrediction(team, id, realTop4Data);
+                                if (pts === null) return null;
+                                if (pts === 5) return <span className="ml-auto text-[10px] font-black bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/30">+5</span>;
+                                if (pts === 2) return <span className="ml-auto text-[10px] font-black bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded border border-yellow-500/30">+2</span>;
+                                return <span className="ml-auto text-[10px] font-black bg-slate-500/20 text-slate-400 px-1.5 py-0.5 rounded border border-slate-500/30">+0</span>;
+                              })()}
                             </div>
                           ) : null
                         ))}
