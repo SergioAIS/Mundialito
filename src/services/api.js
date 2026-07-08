@@ -66,7 +66,9 @@ export const MATCH_TIMES_OVERRIDE = {
   "Belgium-Senegal": "2026-07-01T16:00:00-04:00", "United States-Bosnia and Herzegovina": "2026-07-01T20:00:00-04:00",
   "Spain-Austria": "2026-07-02T15:00:00-04:00", "Portugal-Croatia": "2026-07-02T19:00:00-04:00",
   "Switzerland-Algeria": "2026-07-02T23:00:00-04:00", "Australia-Egypt": "2026-07-03T14:00:00-04:00",
-  "Argentina-Cape Verde": "2026-07-03T18:00:00-04:00", "Colombia-Ghana": "2026-07-03T21:30:00-04:00"
+  "Argentina-Cape Verde": "2026-07-03T18:00:00-04:00", "Colombia-Ghana": "2026-07-03T21:30:00-04:00",
+  "France-Morocco": "2026-07-09T16:00:00-04:00", "Spain-Belgium": "2026-07-10T15:00:00-04:00",
+  "Norway-England": "2026-07-11T17:00:00-04:00", "Argentina-Switzerland": "2026-07-11T21:00:00-04:00"
 };
 
 export const getBoliviaTimeData = (isoString) => {
